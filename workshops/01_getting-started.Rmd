@@ -1,16 +1,22 @@
 ---
+title: "Workshop 1"
 output:
-  html_document: default
-  pdf_document: default
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Workshop 1: Welcome to R!
-
 Thanks for tuning into the first installment of the CBH's R workshops! These weekly meetings will aim to teach the fundamentals of R through examples and applications. No prior experience in R (or any programming language, for that matter) is expected.
+
+# Introduction
 
 ## Who
 
@@ -27,24 +33,24 @@ Weekly workshops to learn the fundamentals of R needed to load, manipulate, and 
 **Week 5:** Making beautiful visualizations using {ggplot2}\
 **Week 6:** Object-oriented R: S3, R6, S4\
 **Week 7:** Developing interactive web apps using {Shiny}\
-**Week 8:** Handling big data\
+**Week 8:** Handling big data using {data.table}\
 **Week 9:** Performing differential expression analysis using {limma}-voom/{DESeq2}\
 **Week 10:** Dimensionality reduction 4 ways\
 **Week 11:** Statistical analysis: sampling, bootstrapping, hypothesis testing, etc.
 
 ## Where
 
-Zoom (join link [here](https://ubc.zoom.us/j/63396313589?pwd=TVVKREhacVlxTFNjd3JFN2ozNEx1Zz09)). You can add [this](https://ubc.zoom.us/meeting/u5cufu-rrzgvEt0ys0SHUYtAi2o9gGYZDaNG/ics?icsToken=98tyKu-rrTIsGdWWtRGOR_MqA4r4M-nzmHZYj7cNhQy1MAhmWxfXP7BNa7VYKeL0) to your calendar to keep track of the meeting schedule.
+Zoom (join link [here](https://ubc.zoom.us/j/63396313589?pwd=TVVKREhacVlxTFNjd3JFN2ozNEx1Zz09)).
 
 ## When
 
-Fridays from 2:00 - 3:00 PST.
+Fridays from 2:00 - 3:00 PST. You can add [this](https://ubc.zoom.us/meeting/u5cufu-rrzgvEt0ys0SHUYtAi2o9gGYZDaNG/ics?icsToken=98tyKu-rrTIsGdWWtRGOR_MqA4r4M-nzmHZYj7cNhQy1MAhmWxfXP7BNa7VYKeL0) to your calendar to keep track of the meeting schedule.
 
 ## Why
 
 By the end of these workshops, you will gain the skills required to perform most basic data analysis in R, author (good) packages, benchmark/optimize your code and effectively self-learn future material.
 
-Why should you choose R instead of other programming languages? R is known to be somewhat quirky and is not the fastest language out there, but it has a large community of data analysts and thus a huge selection of packages for easing your own analysis.
+Why should you choose R instead of other programming languages? R is known to be somewhat quirky and is not the fastest language out there, but it has a large community of data analysts and thus a huge selection of packages for easing your own analysis. It also has some of the best plotting libraries out there.
 
 ## What else
 
@@ -56,15 +62,36 @@ I strongly recommend checking out these resources to supplement your learnings i
 
 # Today: Getting our bearings
 
+## Outline
+
+-   We'll first cover how to get started writing and running R code
+
+-   We'll take a first look at the basic syntax and data types that provide a foundation for all of our future work in R
+
+::: {.code}
+1.  Download R from [CRAN](https://cran.r-project.org/)
+2.  Download [RStudio](https://rstudio.com/products/rstudio/download/preview/)
+:::
+
+## Setting up your R working environment
+
 We'll be focusing on running code in RStudio for these workshops. I'm using *v1.4.953-2 (preview)* which can be downloaded from [here](https://rstudio.com/products/rstudio/download/preview/). I strongly recommend this version as it introduces a visual markdown editor which makes it easy to see these notes while you write your scripts. You'll also need to download R, which is available on CRAN ([here](https://cran.r-project.org/)).
 
 [![](data/rstudio.jpg "RStudio Window"){width="640"}](https://rstudio.com/products/rstudio/download/preview/)
 
 Of course, there are many ways to run R code including via. a Jupyter notebook, or directly from the command line (via. the command `R`). If you have a CWL, you can use the Jupyter instance that Compute Canada provides at [syzygy](https://ubc.syzygy.ca/).
 
+::: {.code}
+If you don't want to download R, you can also use an online service provided by Compute Canada, accessible at [ubc.syzygy.ca](https://ubc.syzygy.ca/).
+:::
+
 When you're writing code, most work will be done in an R markdown file (.Rmd) or an R script (.R), but it's easy and fast to test things in the console, which can be navigated as you'd expect (up/down arrows). We'll spend some time getting familiar with RStudio to maximize your efficiency while minimizing your overhead. At the end of the day, your choice of IDE, layout, keybinds and etc. are your personal preference, but I'll show you what works for me and maybe it'll work for you too!
 
-I'll make these notebooks available in a GitHub, available [here](https://github.com/jsicherman/WorkshopR). I will write these and update the repository as the weeks progress and I highly recommend you clone the repository to your R setup. This can be accomplished by cloning the repository once (`git clone https://github.com/jsicherman/WorkshopR.git`) and then updating it before each week's workshop by running `git pull`.
+I'll make these notebooks available in a GitHub, available [here](https://github.com/jsicherman/WorkshopR). I will write these and update the repository as the weeks progress and I highly recommend you clone the repository to your R setup. This can be accomplished by cloning the repository once (`git clone https://github.com/jsicherman/WorkshopR.git`) and then updating it before each week's workshop by running `git pull`. They'll be uploaded as HTML files with embedded R Markdown so you can download and play around with the scripts inside.
+
+::: {.code}
+Clone the [GitHub repository](https://github.com/jsicherman/WorkshopR) for these workshops and make sure to keep your local copy up-to-date!
+:::
 
 ## A quick introduction to basic R syntax and data types
 
@@ -139,32 +166,106 @@ From this, we can quickly read off the correct parameters and what each one mean
 observations <- rnorm(10, mean = 100, sd = 5)
 ```
 
-### Cheat sheet of data types
-
-Now that you've seen some of these in action, let's formalize this a bit. R has the following standard types.
+### Cheat sheet: basic data types
 
 **logicals**: `TRUE` and `FALSE` (can also be abbreviated as `T` and `F` and are interpreted as `1` or `0` in math contexts).
 
+```{r}
+something <- TRUE
+
+if (something) {
+  print("We did something!")
+} else {
+  print("We didn't do something :(")
+}
+```
+
 **characters**: text or strings. Should be surrounded in double quotes (`"`) but can also be by single quotes (`'`).
+
+```{r}
+first_name <- "Jordan"
+last_name <- "Sicherman"
+
+print(paste("Your name is", first_name, last_name))
+```
 
 **factors**: a representation of a vector of characters, encoded as integral codes.
 
-**numerics**: R automatically converts between `integers` and `doubles`. You don't have to worry about the difference too much.
+```{r}
+planets <- factor(c("Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"), ordered = TRUE)
+planets
+```
+
+**numerics**: R automatically converts between `integers` and `doubles`. You don't have to worry about the difference too much. Mathematical operators are as you'd expect.
+
+```{r}
+secret_number <- sqrt(10^2.5 + 12.5 * (1 / pi))
+```
 
 **missing data**: R provides `NA` to stand in for data that is missing. This is different than `NULL`, which means that the value is undefined (not missing, although it may also technically be missing).
 
 **vectors**: which again come in two "flavors": *homogeneous* (which include `atomic vectors`, `matrices` and `arrays`) and *heterogeneous* (`lists` and `data.frames`)
 
+```{r}
+odd_numbers <- c(1, 3, 5, 7, 9)
+number_sequence <- 1:9
+
+some_matrix <- matrix(number_sequence, nrow = 3, ncol = 3)
+some_data_frame <- data.frame(some_identifier = LETTERS[1:10],
+                              some_value = rnorm(10))
+
+list_properties <- list(name = "Jordan",
+                        favorite_number = 42,
+                        knows_R = TRUE)
+```
+
 **closures and environments**: we'll get to these later
 
-You should get comfortable with identifying and working with the following:
+## Cheat sheet: basic syntax
 
-1.  Integers and doubles
-2.  Characters
-3.  Factors
-4.  Logicals
-5.  Data frames
-6.  Calling functions
++-----------------------+--------------+-----------------------------------------------------------------+
+| Description           | Symbol       | Example                                                         |
++=======================+==============+=================================================================+
+| Add                   | `+`          | `2 + 2`                                                         |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Subtract              | `-`          | `4 - 1`                                                         |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Multiply              | `*`          | `4 * 2`                                                         |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Power                 | `^`          | `2^8`                                                           |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Divide                | `/`          | `5 / 3`                                                         |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Modulus               | `%%`         | `6 %% 2`                                                        |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Equality              | `==`         | `6 + 2 == 8`                                                    |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Inequality            | `!=`         | `TRUE != FALSE`                                                 |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Less than             | `<`          | `2 < 9`                                                         |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Greater than          | `>`          | `9 > 2`                                                         |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Less than or equal    | `<=`         | `pi <= 5`                                                       |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Greater than or equal | `>=`         | `5 * 2 >= 2`                                                    |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Short-circuiting AND  | `&&`         | `TRUE && FALSE`                                                 |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Short-circuiting OR   | `||`         | `FALSE || TRUE`                                                 |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Element-wise AND      | `&`          | `c(T, T, F, T) & c(T, F, F, T)`                                 |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Element-wise OR       | `|`          | `c(T, F, F, T) | c(F, T, T, F)`                                 |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Assignment            | `<-` or `->` | `something <- 10` or `10 -> something`                          |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Vector indexing       | `[]` or `$`  | `c("A", "B", "C", "D")[1]` or `data.frame(A = 1:5, B = 6:10)$A` |
++-----------------------+--------------+-----------------------------------------------------------------+
+| List indexing         | `[[]]`       | `list(A = c(1, 2, 3), B = c(4, 5, 6))[[1]]]`                    |
++-----------------------+--------------+-----------------------------------------------------------------+
+| Checking help         | `?`          | `?sample`                                                       |
++-----------------------+--------------+-----------------------------------------------------------------+
 
 # Exercises
 
