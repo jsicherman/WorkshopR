@@ -6,3 +6,12 @@ div.code {
   font-weight: bold;
   font-size: larger;
 }
+
+.spoiler * {
+  color: #ecf0f1 !important;
+}
+
+.spoiler:before {
+  content: 'Spoiler:';
+  font-weight: bold;
+}
