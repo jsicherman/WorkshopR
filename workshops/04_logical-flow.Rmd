@@ -1,0 +1,406 @@
+---
+title: "Workshop 4"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(dplyr)
+```
+
+We've developed quite the repertoire of useful functions and an intuition of how we can apply them. However, we've mostly focused on applying them to data in a pipeline, which may not always be appropriate. Sometimes, we have entire blocks of code that we want to run over and over again, or only in specific instances. For these, we need to learn more about flow control in R.
+
+# Introduction
+
+## Learning Objectives
+
+1.  We'll turn our attention to `for` and `while` loops, and `if/else` blocks
+
+2.  Next time, we'll learn how to re-write some of these as `apply` and `lapply` blocks and why you might want to
+
+    1.  This will involve a brief discussion on how R works with our objects in memory, as well as on the benefits/difficulties of parallelization
+
+# Today: Logic
+
+## if/else
+
+The simplest component of conditional programming is `if` `else`. We already talked about how to do this inside of pipelines (`if_else`), but that approach is only convenient if we have our data packaged into a single `data.frame` ready for batch analysis. It's common that we want to run *entirely different* blocks of code depending on the context. In R, the syntax is as follows.
+
+```{r eval=FALSE}
+if (some_condition) {
+  # Do everything inside the curly braces if "some_condition" is TRUE
+} else {
+  # Do everything inside the curly braces if "some_condition" is FALSE
+}
+```
+
+As you've already realized, code is run from top-to-bottom, and it is additionally evaluated from the innermost brackets to the outermost. When the code is being evaluated at runtime, it will literally skip over any block of code whose entry conditions are not satisfied. So if `some_condition` is `FALSE`, whatever is inside the first set of `{ … }` will never be seen.
+
+One simple thing we may with to do is use `if` with `else` to select a random dataset.
+
+```{r}
+test <- sample(c(TRUE, FALSE), 1) # Select a random boolean value
+
+if (test) {
+  mData <- dplyr::starwars
+} else {
+  mData <- dplyr::storms
+}
+
+head(mData)
+```
+
+In this formulation, we can only model `some_condition` (the `if`) and the exact opposite of `some_condition` (the `else`). If we have multiple conditions, we can use the syntax `else if`:
+
+```{r}
+dataset <- sample(1:3, 1) # Pick a random number from 1-3
+
+if(dataset == 1) {
+  # If the number was 1...
+  mData <- dplyr::starwars
+} else if(dataset == 2) {
+  # If the number was 2...
+  mData <- dplyr::storms
+} else {
+  # If the number was anything other than 1 or 2
+  mData <- datasets::cars
+}
+```
+
+**Your task:** Use `if/else` to find out whether I'll profit or lose money today. I profit if `income` is greater than `expenses`. If I profit, `print` a happy message. If I lose money, `print` a sad one. And if I happen to break even, print that too.
+
+```{r}
+income <- sample(1:1000, 1)
+expenses <- sample(1:1000, 1)
+
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+income <- sample(1:1000, 1)
+expenses <- sample(1:1000, 1)
+
+if(income > expenses) {
+  print('Yay :D')
+} else if(expenses > income) {
+  print('Oh no :(')
+} else {
+  print('You broke even')
+}
+```
+:::
+
+Up until now, this should be pretty straightforward. Think of `if` and `else` (and `else if`) as though they're plain English and you'll be breezing through them.
+
+As a final reminder, you can nest code inside of other code pretty freely, so you can do something like:
+
+```{r eval=FALSE}
+if(A) {
+  # A was TRUE
+  
+  if(B) {
+    # A /and/ B were TRUE
+    
+    if(C) {
+      # A, B, /and/ C were TRUE
+      ...
+    } else {
+      # A and B were TRUE, but C was not TRUE
+      ...
+    }
+    
+    # A and B were TRUE, but C could be anything here
+  } else if(D) {
+    # A was TRUE, B was not TRUE, but D was TRUE
+    ...
+  }
+  
+  # A was TRUE but B, C and D could be anything here
+} else {
+  # A was not TRUE
+}
+```
+
+Furthermore, remember that variables defined inside of conditionals will only exist if those conditions end up running. So the following is valid code **only if** testA is `TRUE`...
+
+```{r}
+testA <- TRUE
+
+if(testA) {
+  printVar <- 'testA was TRUE!'
+}
+
+print(printVar)
+rm(printVar) # This will remove printVar from the environment
+```
+
+If `testA` was `FALSE`, `printVar` would never be evaluated, so if we tried to `print(printVar)`, we would run into an error (because it wouldn't exist!)
+
+## Loops
+
+Loops are useful when you want to run code repeatedly (duh). Instead of just running and continuing down the screen, as long as the looping condition is fulfilled, we will actually jump back to the start and run it again. We'll focus first on the `for` loop.
+
+### for
+
+```{r}
+for(i in 1:5) {
+  print(i)
+}
+```
+
+For loops have the structure `for(NAME in VECTOR)` where it will:
+
+1.  Get the first element in `VECTOR`
+2.  Assign it to `NAME`
+3.  Run the code in the `{ … }`
+4.  Repeat 1-3 for the next element in `VECTOR` until every item has been seen
+
+This is a pretty simple and powerful framework. You can replace `1:5` with any collection that you want to loop (iterate) over, and it will faithfully pull values out one by one. To be explicit, this doesn't need to be a continuous sequence, or even a sequence at all. Consider the following:
+
+```{r}
+for(i in 1) { # You can loop over a single element
+  print(paste('At', i))
+}
+
+for(i in c(1, -1, 5, 3)) { # Elements don't have to be continuous or ordered
+  print(i)
+}
+
+# Since data.frames are lists of vectors (each column is a vector), looping over them results in a loop over the columns
+
+# For your visualization, this data frame looks like
+# A | B
+# -----
+# 1 | 4
+# 2 | 5
+# 3 | 6
+for(i in data.frame(A = 1:3, B = 4:6)) {
+  print(i) # Prints all the entries in this column
+  
+  # Since i is a vector with all the column entries, you can loop over it again to loop over the entries in this column
+  for(j in i) {
+    print(paste('Entry:', j))
+  }
+}
+```
+
+You'll notice that the iteration variable, `i`, (and also `j` from the inner `for` loop) shows up afterwards in the global environment (unlike in other programming languages where its scope is limited to the loop).
+
+**Your task:** Write a `for` loop to iterate through all the rows of `mData`, `print`ing the `run`, `conc` and `density`. *Hint: We just saw that looping over a data.frame loops over columns. How can we loop over rows?* *Hint 2: You can extract the number of rows as* `nrow(...)`.
+
+```{r}
+mData <- datasets::DNase
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+for(i in 1:nrow(mData)) {
+  print(paste0('Run ', mData$Run[i], ', Concentration: ', mData$conc[i], ', Density: ', mData$density[i]))
+}
+```
+:::
+
+**Your task:** Now adapt your code to only `print` if it is the first observation within each `run`. *Hint: it's useful to assign a helper variable to keep track of which run you last saw*.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+lastRun <- 0
+for(i in 1:nrow(mData)) {
+  if(lastRun != mData$Run[i]) {
+    lastRun <- mData$Run[i]
+    print(paste0('Run ', mData$Run[i], ', Concentration: ', mData$conc[i], ', Density: ', mData$density[i]))
+  }
+}
+```
+:::
+
+One challenging part about loops (and something I will urge you to stay away from in general) is when you also want to assign things to names while looping. What if instead of `print`ing the values, we wanted to store them in a vector?
+
+**Your task:** Now instead of printing for the first observation of each `run`, save it to a character vector, `mOutput`, and `print` it after the loop.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+lastRun <- 0
+mOutput <- c()
+for(i in 1:nrow(mData)) {
+  if(lastRun != mData$Run[i]) {
+    lastRun <- mData$Run[i]
+    mOutput <- c(mOutput, paste0('Run ', mData$Run[i], ', Concentration: ', mData$conc[i], ', Density: ', mData$density[i]))
+  }
+}
+
+print(mOutput)
+```
+:::
+
+The reason I don't recommend doing this kind of thing is multifold:
+
+1.  It's sometimes **slow**
+
+    1.  It has to copy all the data to a new memory location every single loop iteration
+
+2.  It's **not parallelizable**
+
+    1.  We'll talk about this more next time
+
+3.  It's just generally kind of ugly looking
+
+    1.  We want to write pretty code :)
+
+The mistake that people coming to R from other languages (or no prior programming experience) make is falling into the trap of "oh I can just write this as a loop". While probably true most times, you should always aim to write the code as fully vectorized as you can, as you'll be rewarded with many benefits. We'll learn how to write those kinds of things in proper R style next time.
+
+::: {.code}
+Prefer vectorized and pipelined code over loops :)
+:::
+
+**Your task:** Convert this code into a for loop by examining it and its output, and then replicating it. *Hint: you can bind rows together using* `rbind`.
+
+```{r}
+mOutput <- mtcars %>% mutate(kpl = 0.425144 * mpg,
+                  kw = 0.7457 * hp,
+                  fuel_efficiency_rating = case_when(
+                    kpl < 5 ~ 0,
+                    kpl < 6 ~ 1,
+                    kpl < 8 ~ 2,
+                    kpl < 10 ~ 3,
+                    T ~ 4
+                  ))
+
+head(mOutput)
+```
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+mOutput <- data.frame()
+for(i in 1:nrow(mtcars)) {
+  # Select the row we're at...
+  mNew <- mtcars[i, ]
+  
+  # Compute the new columns and add them using the $
+  mNew$kpl <- 0.425144 * mNew$mpg
+  mNew$kw <- 0.7457 * mNew$hp
+  mNew$fuel_efficiency_rating <- case_when(
+    mNew$kpl < 5 ~ 0,
+    mNew$kpl < 6 ~ 1,
+    mNew$kpl < 8 ~ 2,
+    mNew$kpl < 10 ~ 3,
+    T ~ 4
+  )
+  
+  # Bind the new row to mOutput
+  mOutput <- rbind(mOutput, mNew)
+}
+```
+:::
+
+There are obviously valid uses of `for` loops, but in general, they shouldn't be the first thing you look to. In particular, when you can write code as a single vector assignment (using `mutate`, `summarise`, simple vector operations like `*` or `+`, etc.) rather than iterating over rows/columns), you should.
+
+### while
+
+In contrast to `for` loops, `while` loops don't set up an iteration variable. Instead, they consider an entry condition.
+
+```{r eval=FALSE}
+while(condition) {
+  # Do something until condition is FALSE
+}
+```
+
+Remember: the code will never continue after the `{ … }` until it has **fully evaluated the loop**. This means that you **have to make sure that** `condition` **eventually becomes** `FALSE`, otherwise your code will never continue. The following demonstrates this "infinite loop" error:
+
+```{r eval=FALSE}
+something <- TRUE
+while(something) {
+  # Dum dee dum
+}
+print('Done!')
+```
+
+If you run this code, since `something` never becomes `FALSE`, the code will repeat the loop infinitely and never proceed to `print` "Done!". You can press `Escape` on your keyboard to interrupt this (or press the little stop sign in the corner of your console).
+
+::: {.code}
+You must ensure your `while` loop will eventually terminate!
+:::
+
+Instead, you have to make sure you have a definite stopping criterion to ensure this doesn't happen.
+
+```{r}
+something <- 5
+while(something > 0) {
+  print('Looping!')
+  something <- something - 1
+}
+```
+
+**Your task:** The `trees` dataset (`datasets::trees`) contains information on black cherry trees. We want to use these trees to make a super tall tree that is at least `600` feet in `Height`. However, we also want to pick trees at random so we don't always choose the same boring looking tall tree. Write a `while` loop that selects random trees to use to built our tall tree. You should 1) select as many rows as you need to total at least `600` feet, then 2) print out the values of `trees` at your chosen indices and the total height of your tall tree. For the purpose of this task, assume you can use the same tree multiple times. *Hint: you can use* `sample` *to pick random integers*.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+totalHeight <- 0
+indices <- c()
+while(totalHeight < 600) {
+  newIndex <- sample(1:nrow(trees), 1)
+  indices <- c(indices, newIndex)
+  
+  # Make sure to update the totalHeight so this loop can end!
+  totalHeight <- totalHeight + trees$Height[newIndex]
+}
+
+print(trees[indices, ])
+print(paste('The total height is', totalHeight))
+```
+:::
+
+**Your task:** Now we make the problem more realistic by removing the ability to reuse trees. Rewrite your code to ensure you don't select the same tree more than once.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+totalHeight <- 0
+indices <- c()
+while(totalHeight < 600) {
+  newIndex <- sample(1:nrow(trees), 1)
+  
+  # We can simply add a check to make sure the newIndex isn't already in indices
+  if(!(newIndex %in% indices)) {
+    indices <- c(indices, newIndex)
+    
+    # Make sure to update the totalHeight so this loop can end!
+    totalHeight <- totalHeight + trees$Height[newIndex]
+  }
+}
+
+print(trees[indices, ])
+print(paste('The total height is', totalHeight))
+```
+:::

@@ -1,0 +1,371 @@
+---
+title: "Workshop 5"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(dplyr)
+```
+
+We can now work with pipelines (modifying, summarizing and manipulating data frames) and conditionals (guiding our code to where we want, repeating blocks and etc.). These have been very useful in allowing us to pre-process data that's already in mostly the correct form... What if we want to do more complex things? Today we'll learn how to write our own functions and a new way to write `for` loops using `apply`s.
+
+# Introduction
+
+## Learning Objectives
+
+1.  Learn how to write functions and how they behave
+2.  Learn how to write `for` loops as `lapply`s
+
+# Writing functions
+
+You've already been using functions in R - both from base R and from other packages. To make concrete something that you're already familiar with, these `function`s are just self-contained blocks of code that do *something*. Having these modular little blocks of code is super useful when there's a task you want to do often and don't want to rewrite the code every single time. For example, if we wanted to calculate the average of a set of numbers, we could write `sum(x) / length(x)` every single time, but it's much more convenient if we have a function to do this and we only ever have to call `mean(x)` instead (programmers hate typing extra!).
+
+You can define a function yourself as follows:
+
+```{r}
+FUNCTION_NAME <- function(PARAMETERS, GO, HERE) {
+  # CODE GOES HERE
+}
+```
+
+It's also good practice to write documentation for your functions that describe what they do. In R, this is usually done using {roxygen2}. These docstrings look like so:
+
+```{r}
+#' Describe the function briefly
+#'
+#' @param VARIABLES Describe this parameter
+#' @param GO Describe this parameter
+#' @param HERE Describe this parameter
+#'
+#' @return Describe what the function "returns"
+#' @export (advanced) Include this line if you want this function to be visible to other users
+#'
+#' @examples
+#' Give a few examples of how to call your function
+#' FUNCTION_NAME(10, 5, 2)
+#' FUNCTION_NAME(1, 2, 3)
+FUNCTION_NAME <- function(PARAMETERS, GO, HERE) {
+  # CODE GOES HERE
+}
+```
+
+You can insert this quickly using `Code > Insert Roxygen Skeleton` in RStudio while you're clicked inside of your function.
+
+Remember that you can add as many or as few parameters to the function that you'd like, so if you only need one input to run your method, you only need to define one parameter. Three more important things are important to discuss:
+
+1.  Parameters
+
+Whatever is inside the brackets after function (ie. the dots here `function(…)`) are known as parameters. When you're running these functions yourself, you will pass real values here, and the function will bind them to the names you give them (by position). Consider the following:
+
+```{r}
+some_function <- function(name, age, nationality) {
+  paste(name, 'the', age, 'year old', nationality)
+}
+```
+
+At the time of writing the function, we don't know what the values are since they'll change every time someone calls the function. So we give them names that we can refer to them by. When you call the function later on:
+
+```{r}
+some_function('Sabrina', 17, 'witch')
+```
+
+As you can see, `Sabrina` was assigned to the parameter `name`, `17` was assigned to `age` and `witch` was assigned to `nationality`. We saw before that you can also explicitly tell R the name of the parameter you want to assign to, so you could have just as easily done:
+
+```{r}
+some_function(name = 'Sabrina', nationality = 'witch', age = 17)
+```
+
+2.  "Return" values
+
+These are the "answers" to your function. After doing your calculations or reshaping or etc., your return value is what you want to spit back out. These are usually the very last line in your function, so for the following...
+
+```{r}
+multiply <- function(A, B) {
+  tmpA <- A + B
+  tmpB <- A - B
+  tmpC <- B - A
+  A * B
+}
+```
+
+Some calculations take place (`A + B`, `A - B`, and `B - A`) but they are not the final line of the function, and so the are not returned back. This is an important thing to remember: **variables defined inside the function are lost after it runs, unless they are returned**. If you run the function, you can see we get the product of `A` and `B`, as we expect:
+
+```{r}
+multiply(5, 2)
+```
+
+Also notice that the variables `tmpA`, `tmpB`, `tmpC` **do not** show up in your global environment: they only existed inside the `multiply` function and stop existing after.
+
+3.  Default values
+
+Sometimes you have an idea of some "reasonable defaults" for parameters that you don't want to always type in. Observe the following:
+
+```{r}
+answer_survey <- function(email_address, answers, sign_up = TRUE) {
+  # ...
+}
+```
+
+Now when we call the `answer_survey` function, we only need to specify the `email_address` and `answers`. We can leave `sign_up` unspecified, and if we don't tell it anything, it will default to `TRUE`.
+
+With all that out of the way, we can start getting our hands dirty.
+
+**Your task:** Write a function called `as_parrot_years` which takes an age in human years and converts it to parrot years. The conversion is as follows:
+
+1.  If the age in human years is less than 5, the age in parrot years is simply 0.
+2.  Otherwise, the age in parrot years is one less than twice the age in human years.
+
+Make sure to also test your function by calling it a few times and making sure you get the answers you expect.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+as_parrot_years <- function(age) {
+  if(age < 5) {
+    0
+  } else {
+    2 * age - 1
+  }
+}
+```
+:::
+
+**Your task:** Now write a reasonable docstring for your function, `as_parrot_years`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+#' Converts an age in human years to parrot years
+#'
+#' @param age The age in human years
+#'
+#' @return The age in parrot years
+#'
+#' @examples
+#' as_parrot_years(10)
+#' as_parrot_years(1)
+as_parrot_years <- function(age) {
+  if(age < 5) {
+    0
+  } else {
+    2 * age - 1
+  }
+}
+```
+:::
+
+If you're writing functions that you plan to share with others, its also important to write defensive code that prevents issues from happening. What if someone tried to pass a character instead of a number to `as_parrot_years`? What if they tried to pass a negative age? You can prevent them from making such mistakes and help them better use your tools by providing helpful feedback messages using the base R functions `warning` and `message`. If the issue is so severe that you can't continue, you can also use `stop`.
+
+```{r error=TRUE}
+plus_two <- function(x) {
+  # Output a message to the user
+  message(paste0('Adding 2 to "', x, '"'))
+  
+  if(is.na(x)) {
+    # Warn when trying to add to NA
+    warning('Attempted to add 2 to NA')
+  } else if(!is.numeric(x)) {
+    # Stop running this since we can't add 2 to a non-numeric input
+    stop('x must be numeric!')
+  }
+  
+  x + 2 # Finally return our result
+}
+
+plus_two(4)
+plus_two(NA)
+plus_two('seven')
+```
+
+**Your task:** Add similar defensive checks to your `as_parrot_years` function.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+#' Converts an age in human years to parrot years
+#'
+#' @param age The age in human years
+#'
+#' @return The age in parrot years
+#'
+#' @examples
+#' as_parrot_years(10)
+#' as_parrot_years(1)
+as_parrot_years <- function(age) {
+  if(is.na(age)) {
+    warning('Attempting to convert an NA age')
+  } else if(!is.numeric(age)) {
+    stop(paste(age, 'is not an age!'))
+  } else if(age < 0) {
+    warning('Passed a negative age. Was this intentional?')
+  }
+  
+  if(age < 5) {
+    0
+  } else {
+    2 * age - 1
+  }
+}
+```
+:::
+
+# lapply
+
+`lapply` is a super useful function. It stands for "list apply" and it takes two arguments: a vector and a function, and then calls that function on each element in the vector, returning a list. This is a hard concept to get ahold of at first: it *takes a function as a parameter*. This will make more sense by looking at the output.
+
+```{r}
+lapply(1:5, plus_two)
+```
+
+We'll dissect this a bit before getting into more complicated examples. We pass a vector: numbers from `1` to `5`. We then call `plus_two` on every element separately and get the result as a list entry. This proceeds to run as follows:
+
+1.  The number `1` is encountered. Run the function `plus_two(1)` and put the result, `3`, into a list.
+2.  Now the number `2` is encountered. Run the function `plus_two(2)` and put the result, `4`, in the same list
+3.  Continue until all elements in the vector are processed
+
+This is awfully similar to a `for` loop that packages our results into a list by itself, instead of having us append values into a growing list.
+
+**Your task:** Translate the above into a `for` loop that saves the results into a list.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+mList <- list()
+for(i in 1:5) {
+  mList[[i]] <- plus_two(i)
+}
+```
+:::
+
+An easy mistake to make is writing something like this:
+
+```{r error=TRUE}
+lapply(1:5, plus_two())
+```
+
+The error we made is using `()` after `plus_two`. Can you explain why this is an error before reading the next sentence? By writing `plus_two()`, instead of telling R which function we want *it* to call on each element, we're calling it ourself! R will first evaluate whatever `plus_two()` is equal to, and then try to pass that result as the function it should call in the `lapply`. Be wary to pass functions by name only - don't use the `()` :)
+
+A beautiful convenience when using `lapply` is that you can define functions inline. This means that you don't need to write a function beforehand, but you could do something like this:
+
+```{r}
+lapply(1:3, function(i) {
+  i + 2
+})
+```
+
+You should reserve this kind of "anonymous", inline function definition for small tasks. If the function is complicated enough to use more than a handful of lines, your better of defining the function, assigning a name to it and writing a docstring. This ensures you'll have readable code.
+
+**Your task:** Convert this `for` loop to a solution using `lapply` and an anonymous function.
+
+```{r}
+mList <- list()
+
+for(i in 1:5) {
+  mList[[i]] <- 2 * i + (1 - i) / 2
+}
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+mList <- lapply(1:5, function(i) {
+  2 * i + (1 - i) / 2
+})
+```
+:::
+
+Finally, keep in mind that you need not return the same kind of data that you input. So you can use `lapply` to map too.
+
+```{r}
+lapply(1:5, function(i) {
+  data.frame(ID = i, value = rnorm(1, mean = i))
+})
+```
+
+A common final step when running `lapply` is to either `unlist` the output (if you want a vector of values) or `rbind` the list elements into a data frame. The latter is accomplished via:
+
+```{r}
+mList <- lapply(1:5, function(i) {
+  data.frame(ID = i, value = rnorm(1, mean = i))
+})
+
+do.call(rbind, mList)
+```
+
+**Your task:** Construct the following data frame using `lapply`.
+
+```{r}
+mData <- data.frame(A = 1:10, B = LETTERS[11:20], C = rep(letters[1:2], each = 5))
+
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+mData <- do.call(rbind, lapply(1:10, function(i) {
+  data.frame(A = i,
+             B = LETTERS[10 + i],
+             C = if_else(i <= 5, letters[1], letters[2]))
+}))
+```
+:::
+
+## Why lapply?
+
+Other than saving on a few characters when typing, why would we want to use `lapply` instead of `for` loops or etc.?
+
+People used to say that the `apply` functions were orders of magnitude faster than `for` loops, but nowadays they're nearly as fast. There remains *some* benefit in terms of speed because unless you're careful, your `for` loops will have to copy the entire growing result every time it reassigns it and `apply` functions are carefully coded by experts to avoid this.
+
+Otherwise, the `apply` functions are convenient because:
+
+1.  They're usually easier to read than loops
+2.  They don't modify variables in your global environment, so it won't get messy with indexing variables (like `i` or `x` or `j`)
+3.  They can be easily parallelized
+
+This final point is important for people working with big datasets. Consider the way the `for` loop runs:
+
+```{r}
+mResult <- c()
+
+for(i in 1:10) {
+  mResult[i] <- rnorm(1, i)
+}
+```
+
+Every single time it progresses through the loop, the variable `mResult` is copied, changed and stored from some common location in memory. As long as these loop iterations runs *serially*, this is fine: we're guaranteed that when we try to change `mResult`, the previous iteration has finished, `mResult` is storing the correct value and no other process is trying to simultaneously read/write it.
+
+We can see that each iteration is independent of the others, though. We never care what any other value of `mResult` is, we just faithfully add a new one using `rnorm`. If we had to do this millions and millions of times, doing this one-by-one will be pretty time consuming (and this is just a simple example).
+
+Contrast this with `lapply`...
+
+```{r}
+mResult <- lapply(1:10, function(i) {
+  rnorm(1, i)
+})
+```
+
+Every iteration, it calls the anonymous function with the parameter `i` as one of the numbers from `1` to `10`. Once they've all been calculated, they eventually get stored in `mResult`. Instead of updating the common `mResult` `10` times, they only update it once at the end. The implication of this is that we can run each of these iterations simultaneously, even on different computers, and just aggregate the results in `mResult` at the end! So if we had millions and millions of iterations to run, we could send chunks off to different threads/computers (the details of this aren't important for us) to perform a fraction of the work in parallel and get the results back much faster.
+
+For those of you that want to take advantage of this, you can try the `parallel` package, which provides the multi-core equivalent `mclapply` (multi-core `lapply`).

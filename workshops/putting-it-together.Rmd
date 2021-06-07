@@ -1,0 +1,301 @@
+---
+title: "Putting it all together"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(dplyr)
+library(reshape2)
+library(tidyr)
+library(ggplot2)
+```
+
+We've covered a lot of material so far. The following are a collection of case studies where you can apply everything you know to solidify your understanding.
+
+# Avocado Prices
+
+We start by considering our first dataset: `data/avocado.csv`. This data is downloaded from [Kaggle](https://www.kaggle.com/neuromusic/avocado-prices) and contains price data for avocado sales in the US. We'll show that avocado sales in the US follow something called Benford's law.
+
+Using {vroom}, load this data into your global environment and bind it to the name `data1`.
+
+```{r}
+# TODO Load the dataset.
+```
+
+Get acquainted with the data by checking the `head`, `tail`, or `glimpse`-ing at it.
+
+```{r}
+# TODO Get acquainted
+```
+
+You'll notice that some of the column names are surrounded in back-ticks (the backwards '). This means that they contain special or "reserved" characters such as spaces, symbols, or start with a number. You could override these when you load the data directly from `vroom`, but lets just change them now that we can see them loaded in. Make all the column names lowercase and change spaces to underscores (\_). Also rename the first column to `index`. *Hint: you can assign column names using* `colnames(data) <- …`
+
+```{r}
+# TODO Make the column names neat and tidy
+```
+
+One thing I've been particularly interested in lately is called Benford's law - the law of anomalous numbers. Benford's law states that the first digit of numbers in many real-life numerical datasets follow a certain distribution, namely:
+
+$$
+P(d) = \log_{10}(1+\frac{1}{d})
+$$
+
+This phenomenon has been used to detect tax fraud, image alterations and etc. It's easy to test whether avocado sales follow this law: all we have to do is extract the first digit of the number of avocado sales (`total_volume`) and plot its frequency distribution. Let's do this!
+
+The way we get the first digit out of `total_volume` is by first making a character representation and then using `substring` to extract the first character of the string. Let's first add this new column: `total_volume_char` which is `total_volume` as a character.
+
+```{r}
+# TODO Add the total_volume_char column
+```
+
+Now we can simply use `substring` to extract only the first character of the string in `total_volume_char`. Add it to `data` as `first_digit`.
+
+```{r}
+# TODO Add the first_digit column
+```
+
+Now that we have the first_digit column in our data, we can proceed to plot it and see its frequency distribution. I'll give you the starter code since we haven't learned {ggplot} yet, just fill in the blanks.
+
+```{r eval=FALSE}
+FILL_ME %>% # Provide the data you want to plot
+  ggplot(aes(FILL_ME)) + # Hint: aes stands for "aesthetics". Specify the variable you want to plot
+  geom_histogram(stat = 'count') + # Specifies that we want a frequency plot
+  theme_classic() + # Theme elements
+  xlab('First Digit') + ylab('Count')
+```
+
+To confirm that this looks like what Benford's law predicts, let's generate data according to the formula above and plot it next to our real data. We'll do this two ways to demonstrate how vectorizing code helps in R.
+
+First, we need to know how much data we want to generate. Since we'll be comparing it to our real data, this should simply be the same amount. How much data is that? Use the `nrow` function see how many observations are in `data1` and save it to the variable `N`.
+
+```{r}
+# TODO Find N
+```
+
+We now want to create random first-digits that follow the probability given above. I'll write it again here for convenience:
+
+$$
+P(d) = \log_{10}(1+\frac{1}{d})
+$$
+
+This states, for example, that the probability of a `1` occurring is `P(1) = log10(1 + 1/1) = log10(2)`. Let's create a length-9 vector of these probabilities that is indexed by the digit (ie. the first entry is `P(1)`, the second entry is `P(2)`, etc.) and save it to `digit_probs`.
+
+```{r}
+# TODO Create digit_probs
+```
+
+Now we can proceed to draw random integer values to create our simulation. Let's do this first for practice using a `for` loop. Your `for` loop should iterate from `1` to `N`, generating a single random integer from `1-9` using the probabilities in `digit_probs` each time.
+
+To give you an idea of how this works, you can use `sample` to select random items from a vector of possibilities with given probabilities. If you wanted to select either `TRUE` 60% of the time, or `FALSE` 40% of the time, you could write something like this: `sample(c(TRUE, FALSE), 1, prob = c(0.6, 0.4))`. See `?sample` for more info.
+
+Do this and save the digits in a numeric vector names `digit_sim`.
+
+```{r}
+digit_sim <- c()
+
+# TODO Create your for loop to fill digit_sim with N numbers
+```
+
+Of course, `for` loops aren't always the best way to go. `sample` allows you to draw multiple numbers (with or without replacement) so instead of iteratively growing our selection, we can just generate it on one call by specifying `size = N` in `sample`. Do this now and save the result to `digit_sim`.
+
+```{r}
+# TODO Now create digit_sim more efficiently
+```
+
+Let's put our simulation together with our `data1` so its all in one convenient place for plotting. Add the values from `digit_sim` into a column called `first_digit_sim`.
+
+```{r}
+# TODO Add first_digit_sim to data1
+```
+
+We could plot it as is, but let's do a little more data wrangling first. You'll usually do your plotting with data in `long` format, that is, one observation per row. We're currently concerned about observations of `first_digit` and `first_digit_sim` in `data1`, but they're on the same row so the data is not long for our purposes. Select only those two columns and then use the appropriate `reshape`-ing formula (either `dcast` or `melt`) to make the data long. Save the result to `data1_plot`. *Hint: by selecting **only** these two **measurement** variables, you have no ID variables. Make sure to provide* `id.vars = NULL` *to ensure this is understood by R.*
+
+```{r}
+# TODO Create data1_plot
+```
+
+We'll plot this simulation together with the real avocado data to see how they compare. Again, I'll write the starter code and leave it to you to fill in the blanks. *Hint: check out your data1_plot to see the column names and what they contain.*
+
+```{r eval=FALSE}
+FILL_ME %>% # Provide the data you want to plot
+  ggplot(aes(FILL_ME, fill = variable)) + # Hint: aes stands for "aesthetics". Specify the variable you want to plot
+  geom_histogram(stat = 'count', position = 'dodge') + # Specifies that we want a grouped frequency plot
+  theme_classic() + # Theme elements
+  scale_fill_brewer(name = 'Variable', palette = 'Dark2') +
+  xlab('First Digit') + ylab('Count')
+```
+
+Without too much work, we showed that avocado sales follow Benford's law!
+
+# Iris
+
+A classic example that is baked directly into R is Edgar Anderson's Iris data, `iris`. Learn about this dataset by using the `?` command in R, and then we'll continue. We'll do some exploratory analysis and see how we can use machine learning to cluster data.
+
+```{r}
+# TODO Get help information for the dataset
+```
+
+As is standard, we should also have a look at our data.
+
+```{r}
+# TODO Explore the data
+```
+
+We want to give the results of our analysis to American researchers, who insist on using inches as their unit of choice. Convert all the numeric entries into inches and bind the resulting data as `data2`.
+
+```{r}
+# TODO Convert numeric entries into inches
+```
+
+This data is already in long format, that is, each row is an observation. Before we do any analysis, we want to get an overview of the distributional properties of our data. Write one pipeline that outputs a `3x9` data frame that contains information on the `mean` and standard deviation (`sd`) for each numeric column (ie. `mean.Sepal.Width`, `sd.Sepal.Width`, etc.). Save it to the name `data2_overview`.
+
+```{r}
+# TODO Calculate means and standard deviations
+```
+
+Note that we could have done the same task in a slightly different way, if we were so inclined. We'll explore this other way so we have all our bases covered.
+
+Instead of having single observations on each row, we can make this data even longer so that the measured variable is on each row. Make this data longer and save it to `data2_longer` using the appropriate method.
+
+```{r}
+# TODO Make the data longer
+```
+
+You should have a data frame that has three columns: `Species`, `variable` and `value`. Now, instead of computing a `3x9` data frame, we can compute a `12x4` data frame that has the columns `Species`, `variable`, `mean` and `sd`. Every row will now correspond to a unique combination of `Species` and `variable`. Calculate these and save them to `data2_longer_overview`.
+
+```{r}
+# TODO Calculate means and standard deviations
+```
+
+As you can see, when you're writing code for data analysis, there are often multiple correct ways to do things. However, one way may help you save on typing.
+
+Now, we have a gentle introduction to plotting in R. We'll enhance our skills with this later using {ggplot}, but for the time being, I'll provide some boilerplate for you. We're going to visualize some of the variables in `data2`. Specifically, we'll visualize the relationship between `Sepal.Length` and `Petal.Length`. We'll also visualize how they vary with `Species` by making a scatterplot that is colored by the species. Fill in the blanks to generate the plot.
+
+```{r eval=FALSE}
+FILL_ME %>% # Hint: you need to pass the data (in long format) to ggplot
+  ggplot(aes(x = FILL_ME, y = FILL_ME, color = FILL_ME)) + # Hint: aes stands for "aesthetics". You should provide the variable that you want to plot
+  geom_point() + # Adds geometry to our plot
+  theme_classic() + # Sets theme elements
+  xlab('Sepal Length (in)') + ylab('Petal Length (in)') # Axis labels
+```
+
+As you can see in this plot, the three species separate pretty cleanly in these two dimensions. Imagine, however, that we didn't have a `Species` label and instead, we only had the two measurements `Sepal.Length` and `Petal.Length`. Can we deduce the `Species` clusters from it? One method we can try is called `k-means` clustering where we attempt to group the data into `k` distinct clusters. The function in R to do this is called `kmeans`, which returns a list with cluster assignments in the list entry named `cluster`. Run `kmeans` on `data2` for the columns `Sepal.Length` and `Petal.Length` for two values of `k`: both `2` and `3`. Save the results in `kmean_2` and `kmean_3`.
+
+```{r}
+# TODO Run kmeans
+```
+
+For now, we won't concern ourselves with the details of k-means clustering and just continue with our analysis. Extract the cluster assignment from your `kmean_*` objects and add them as the columns `Cluster.2` and `Cluster.3` in `data2`.
+
+```{r}
+# TODO Bind cluster assignments to data2
+```
+
+We can visualize the cluster assignments to see how they mapped onto our data like we did before. Since cluster assignments are coded as numbers, {ggplot} will color them smoothly (as continuous variables), so we have to convert them to `factor`s or `character`s first so {ggplot} knows we want them to be discrete.
+
+```{r eval=FALSE}
+FILL_ME %>% # Hint: you need to pass the data (in long format) to ggplot
+  mutate(`k = 2` = FILL_ME, # Convert Cluster.1 and Cluster.2 to characters or factors
+         `k = 3` = FILL_ME) %>%
+  melt(measure.vars = c('k = 2', 'k = 3'), value.name = 'Cluster') %>% # Melt cluster assignments
+  ggplot(aes(x = FILL_ME, y = FILL_ME, color = Cluster, shape = variable)) + # Hint: aes stands for "aesthetics". You should provide the variables that you want to plot
+  geom_point(size = 4) +
+  theme_classic() + # Sets theme elements
+  scale_color_brewer(palette = 'Dark2') + # Change legend colors
+  scale_shape_manual(name = 'Value of k', values = c(`k = 2` = 1, `k = 3` = 3)) + # Change shapes
+  xlab('Sepal Length (in)') + ylab('Petal Length (in)') # Axis labels
+```
+
+# Meat Consumption and Happiness
+
+The next dataset that we'll turn our attention to is about [worldwide meat consumption](https://www.kaggle.com/vagifa/meatconsumption). Over the course of this case study, we'll integrate multiple public datasets to try to find interesting looking patterns. It's located in `data/mean_consumption_worldwide.csv`. Let's load it into `data_meat`.
+
+```{r}
+# TODO Load the meat consumption data
+```
+
+There's one more dataset that we'll use in our analysis: the [World Happiness Report](https://www.kaggle.com/mathurinache/world-happiness-report) (again downloaded from Kaggle). Let's load it in using `vroom` again from `data/happiness_2015.csv`, saving the result to `data_happiness`.
+
+```{r}
+# TODO Load the world happiness report data
+```
+
+If you take a peek at `data_happiness`, you'll notice again that the column names contain special characters (brackets and spaces). Clean up the column names like you've done many times before.
+
+```{r}
+# TODO Clean up the column names
+```
+
+If you're observant, you might have noticed that both `data_happiness` and `data_meat` have a `country` column, but one provides them as three letter country codes and the other provides them as country names. If we want to combine these datasets, we need to be able to compare these. Luckily, a package exists for this purpose! Install and load the package `countrycode`.
+
+```{r}
+# TODO Install and load countrycode
+```
+
+We'll convert the country names in `data_happiness` into three letter country codes. Technically, we could instead choose to turn the country codes in `data_meat` into country names, but since that dataset has more observations (`13760 > 158`), it will be faster to perform this mapping on the smaller dataset.
+
+The function `countrycode` will do this mapping for us. Create a column in `data_happiness` called `country_code` by using this function to map from `origin = 'country.name'` to `destination = 'iso3c'`.
+
+```{r}
+# TODO Create the country_code column
+```
+
+There's one more piece of pre-processing we need to do before we can compare these datasets. Note that the `data_happiness` was collected in 2015. To ensure our comparisons are fair, we should also subset `data_meat` for records collected in that year. Perform this filtration based on the entries of `TIME`, saving the smaller data frame to `data_meat_2015`
+
+```{r}
+# TODO Create data_meat_2015
+```
+
+We're now ready to merge these datasets together based on the shared country codes. Perform this merge (of `data_meat_2015` and `data_happiness`) and save the result to `data_meat_happiness`.
+
+```{r}
+# TODO Create data_meat_happiness
+```
+
+Now we can start doing some interesting things.
+
+You may notice that over the course of the merge, we lost a few observations. The default behavior of `merge` is to drop rows that don't have a corresponding `by` entry so that we're left with only complete data (ie. if there's a country in `x` that isn't present in `y`, the default behavior is to drop that row). That's okay for our purposes, but you should be aware of it.
+
+`data_meat` provides multiple measures for meat consumption. We'll only concern ourselves with one: `KG_CAP` (kilograms per capita). Filter your `data_meat_happiness` dataset so that you only retain entries whose measure is `KG_CAP`.
+
+```{r}
+# TODO Filter data_meat_happiness
+```
+
+One question we may ask with these datasets is "is meat consumption correlated with happiness?". To examine this, we can use `cor` to find the correlation of these variables. Let's restrict our focus to only `POULTRY` for this analysis. You should:
+
+1.  Filter `data_meat_happiness` for only entries pertaining to `POULTRY`
+2.  Examine the correlation between `happiness_score` and `Value`.
+
+```{r}
+# TODO Examine the correlation between happiness and amount of chicken consumed
+```
+
+We can look at this on a scatterplot again using {ggplot}. As usual, here's the boilerplate, fill in the blanks!
+
+```{r eval=FALSE}
+FILL_ME %>%
+  ggplot(aes(x = FILL_ME, y = FILL_ME)) +
+  geom_point() +
+  stat_smooth(method = 'lm', color = 'red', linetype = 2) + # Add a regression line
+  theme_classic() +
+  facet_wrap(~SUBJECT, scales = 'free_y') + # Make individual panels per subject
+  xlab('Happiness Score') + ylab('Meat consumed (kg per capita)')
+```
+
+Some of the factors that go into the world happiness score are GDP per capita, healthy life expectancy, so we shouldn't be surprised to see a relationship between these measures.
+
+# Closing Remarks
+
+In only a few weeks, we've already become capable of doing some interesting analyses! The road ahead is filled with cool things: we'll learn how to make beautiful visuals with {ggplot}, interactive web applications with {R Shiny}, work with large datasets using {data.table} and generally continue to expand our programming know-how.

@@ -1,0 +1,491 @@
+---
+title: "Workshop 10"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(dplyr)
+```
+
+# Introduction
+
+Today, we will review different methods for processing images in R. Although it's definitely not my area of expertise, nor a particularly strong side of R, I'll introduce what seem to be the strongest tools for it and speculate on applications to student projects. As of the first upload, this is incomplete but I will fill in the remaining part of the machine learning exercise next time.
+
+## Learning Objectives
+
+1.  We'll get familiar with the {EBImage} package for two applications: segmenting images and pre-processing images to use in machine learning methods
+
+# Disclaimer: Image processing in R
+
+While R does have some packages for image processing, it remains a relatively underdeveloped side of the language. In my searches, I found that {imager} and {EBImage} packages are the most featureful and flexible at the time, but it's possible that you will find everything you need in {magick}, which wraps ImageMagick (a separate software package for image processing). Generally, though, R should not be your go-to for most image processing tasks. Matlab is likely a better alternative with more software packages available to assist you.
+
+# Cell segmentation
+
+To begin, we'll start with a simple problem of image segmentation. That is, given an image composed of multiple distinct parts/classes, we want to automatically detect pixels corresponding to each part. This part of the workshop roughly follows the introduction in the [EBImage vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/EBImage/inst/doc/EBImage-introduction.html). Our goal is to automatically determine where each individual cell begins and ends.
+
+First, we need to install and load EBImage, which comes from Bioconductor:
+
+```{r eval=FALSE}
+install.packages('BiocManager')
+BiocManager::install('EBImage')
+```
+
+```{r message=FALSE}
+library(EBImage)
+```
+
+## Loading data
+
+{EBImage} gives us access to a `readImage` function, which allows us to easily read image files into R. They also provide us with two sample fluorescent microscopy image stacks: one for nuclei:
+
+```{r echo=FALSE}
+display(readImage(system.file('images', 'nuclei.tif', package = 'EBImage')), 'raster', all = T)
+```
+
+And another for cell bodies:
+
+```{r echo=FALSE}
+display(readImage(system.file('images', 'cells.tif', package = 'EBImage')), 'raster', all = T)
+```
+
+These images are stored as a special class, intuitively called `Image`.
+
+**Your task:** Load the images for the nuclei and cell bodies, saving them to the names `nuclei` and `bodies`. You can load the files by using the following commands to get access to their storage location:
+
+1.  `system.file('images', 'nuclei.tif', package = 'EBImage')`
+2.  `system.file('images', 'cells.tif', package = 'EBImage')`
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+nuclei <- readImage(system.file('images', 'nuclei.tif', package = 'EBImage'))
+bodies <- readImage(system.file('images', 'cells.tif', package = 'EBImage'))
+```
+:::
+
+If you print out these `Image`s, you'll see some information about them. Namely, you'll see that they're 510x510 grayscale images, comprised of 4 frames (all plotted above using the `display` function). You can extract single frames from this image stack by using the `getFrame` function.
+
+## Image stacking
+
+To visualize the cells, we can create a false-color image representation by overlaying these images onto each other. Note that grayscale images are stored as matrices of pixel intensities in a single channel, so we can arbitrarily choose other color channels to represent them in (ie. red/green/blue) or manipulate the pixel intensities as we would manipulate a matrix. In their vignette, authors displayed these in green/blue, but in practice, we can use any color channel we want (such as green/red):
+
+```{r echo=FALSE}
+display(rgbImage(nuclei * 1.5, bodies), 'raster', all = T)
+```
+
+We accomplish this by telling {EBImage} to construct an `rgbImage` and providing pixel intensities for the red, green and blue channels. We can, at the same time, amplify the pixel intensities for the cell bodies to make them more visible against the background by simply multiplying them by any numerical factor.
+
+**Your task:** Overlay the images you loaded previously in any two color channels you want, saving the result to `cells`. Also scale up pixel intensities for the cell bodies to make them more visible.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+cells <- rgbImage(bodies * 2, nuclei)
+# Make the intensity of the cell bodies twice as intense
+```
+:::
+
+## Nuclei segmentation
+
+We'll segment the nuclei first, as they are sharp and easy to segment compared to the cell bodies. We accomplish this by performing a series of steps:
+
+1.  **Threshold** the nuclei to obtain a binary (0 or 1) version of background/foreground. {EBImage} implements adaptive thresholding by comparing a pixel's intensity to the background intensity (based on a sliding window).
+2.  Perform **opening**, which helps to remove some of the thresholding noise
+3.  **Fill hulls** to fill in any holes in our binarized image
+4.  **Label** each separate nucleus
+
+These steps are implemented in the functions `thresh`, `opening`, `fillHull` and `bwlabel`.
+
+**Your task:** Segment the nuclei (saving the result to `nuclei_labels`) by sequentially applying these functions to our `nuclei` in a pipeline. *Hint 1*: For `thresh`, you will need to play around with the `w` and `h` parameters to tune it to the nucleus sizes, and the `offset` parameter optimally segment against the background noise. Ideally, you'll identify the each complete nucleus without many holes or much background noise *Hint 2:* You may not see a large effect at this step, but you should ensure to specify a `kern` (a structuring element to define the neighborhood of each pixel). This `kern` should ideally be a similar shape/size to the image you're trying to structure (see [this page](https://www.mathworks.com/help/images/structuring-elements.html)).
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+nuclei_labels <- nuclei %>%
+  thresh(w = 11, h = 11, offset = 0.05) %>% # Approximate size of cells, and offset tuned to identify nicely
+  opening(makeBrush(5, shape = 'disc')) %>% # "Disk-shaped" cells
+  fillHull %>%
+  bwlabel
+```
+:::
+
+## Cytoplasm segmentation
+
+Nuclei are rather easy to segment in this example since they are sparsely distributed against a mostly-off background. {EBImage} using these as seed points to partition the remaining space effectively, essentially ensuring that the labels of the local neighborhood are assigned in a way that makes sense for the seed points.
+
+We can do this by:
+
+1.  Roughly **thresholding** the cell bodies
+2.  Performing **opening** to again reduce the thresholding noise
+3.  **Propagating** labels onto our cell bodies based on the seeds (nuclei) and mask (thresholded cell bodies). This uses Voronoi tesselation.
+
+In their vignette, {EBImage} performs the first filtering step by using a simple pixel intensity cutoff, but in practice, I found that adaptive thresholding does somewhat better for this task.
+
+**Your task:** Implement this segmentation of `bodies` by performing similar steps to the above. Save the resulting labeled image to `cell_labels`. You will either `thresh`old (if you do, remember to fill holes like before) or use a simple intensity cutoff to binarize cell bodies, reduce thresholding noise by performing `opening` and then `propagate` segmentations through the original `bodies` image, using the labeled nuclei (`nuclei_labels`) as seeds.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+cell_labels <- bodies %>%
+  thresh(w = 150, h = 150, offset = 0.001) %>% # Large sliding window
+  opening(makeBrush(9, 'disc')) %>%
+  fillHull %>%
+  propagate(bodies, nuclei_labels, .)
+```
+:::
+
+## Visualizing segmentations
+
+With the cells and nuclei now segmented, we can visualize the segmentations on top of our original false-color image by painting outlines. This is done using {EBImage}'s `paintObjects` function to sequentially add outlines to the `cells` image.
+
+**Your task:** On top of `cells`, paint both `nuclei_labels` (in the color [█]{style="color: #FF0"} `#FFFF00`) and `cell_labels` (in the color [█]{style="color: #F0F"} `#FF00FF`) and `display` the result. *Hint:* The first parameter you pass to `paintObjects` should be the labeled mask you want to paint onto the second parameter.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+nuclei_labels %>%
+  paintObjects(cells, col = '#FFFF00') %>%
+  paintObjects(cell_labels, ., col = '#FF00FF') %>%
+  display('raster', all = T)
+```
+:::
+
+You should see good quality segmentation of each cell's nuclei and body, as below.
+
+```{r echo=FALSE}
+nuclei_labels %>%
+  paintObjects(cells, col = '#FFFF00') %>%
+  paintObjects(cell_labels, ., col = '#FF00FF') %>%
+  display('raster', all = T)
+```
+
+Or painted onto a black background...
+
+```{r echo=FALSE}
+nuclei_labels %>%
+  paintObjects(combine(lapply(1:4, function(x) rgbImage(matrix(0, nrow = 510, ncol = 510)))), col = '#FFFF00') %>%
+  paintObjects(cell_labels, ., col = '#FF00FF') %>%
+  display('raster', all = T)
+```
+
+## Working with segmentations
+
+Remember that these labels are not binary - they have integer codes identifying each object. We can use this to extract masks for specific objects in the original image.
+
+**Your task:** `display` all odd number labeled nuclei with maximum intensity and the corresponding cell bodies at half intensity (remember: the cell body labels have been derived from these as "seeds", so they should correspond with each other).
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+((nuclei_labels %% 2 == 1) + 0.5 * (cell_labels %% 2 == 1)) %>% display
+
+# We can also extract single elements this way...
+((nuclei_labels == 25) + 0.5 * (cell_labels == 25)) %>% display
+```
+:::
+
+Of course, we can also use our segmented image to mask areas of our original image. We only have to be careful because our segmentations are grayscale while our false-color image of the cells is in three color channels (red, green and blue). We can then choose to mask it from whatever color channel(s) we want.
+
+**Your task:** From our false-color image, `cells`, mask out the cells with the label `20` and `15`. The basic procedure is as follows:
+
+1.  Make a mask for the cells labeled `20` or `15`
+2.  Create an `rgbImage` by adding the mask to the color channels you want to mask out
+3.  Subtract this from the original image and display
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+cell_of_interest <- (cell_labels == 20 | cell_labels == 15)
+
+(cells - rgbImage(green = cell_of_interest, blue = cell_of_interest)) %>% display
+```
+:::
+
+We can do the opposite (ie. "mask in" instead of "mask out") by just inverting our equality statement.
+
+**Your task:** Display only the cells labeled `15` and `20`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+cell_of_interest <- (cell_labels != 20 & cell_labels != 15)
+
+(cells - rgbImage(green = cell_of_interest, blue = cell_of_interest)) %>% display
+```
+:::
+
+# Computer vision
+
+You may also be processing images for computer vision tasks, which commonly require extensive pre-processing to ensure consistency, and possibly create some transformations to expand the size of the corpus.
+
+For simplicity, I'll be demonstrating using an MNIST-like set of handwritten images, from [RRighart's github project](https://github.com/RRighart/Digits/). For image transformations, we'll use {EBImage} again, and for machine learning, we'll use [Tensorflow](https://tensorflow.rstudio.com/) (an R interface to the Python package. Some setup required).
+
+![](https://raw.githubusercontent.com/RRighart/Digits/master/HandwrittenDigits.JPG)
+
+We'll focus mainly on the image pre-processing today, aiming to extract each digits from this sheet into their own representation and perform some transformations to grow our corpus.
+
+## Loading data
+
+First we'll follow similar steps as [RRighart](https://rrighart.github.io/Digits/) to load the data into R. This involves first downloading the sheet, resizing it to ensure each digit occupies a 28 pixel square and then segmenting it into individual digits.
+
+**Your task:** Read the handwritten digits from [`https://raw.githubusercontent.com/RRighart/Digits/master/HandwrittenDigits.JPG`](https://raw.githubusercontent.com/RRighart/Digits/master/HandwrittenDigits.JPG) into an Image named `sheet`. Display it to inspect.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+sheet <- readImage('https://raw.githubusercontent.com/RRighart/Digits/master/HandwrittenDigits.JPG')
+# display(sheet)
+```
+:::
+
+## Formatting data
+
+**Your task:** We want to resize the image such that each individual digit occupies a 28x28 pixel square. It turns out that there are 42 columns in the image, so we can `resize` to obtain a width of `28*42` pixels. We also want to get rid of the empty rows/columns... It turns out that there is one empty column on either end of the sheet, and 56 total rows filled. We can therefore crop the image by keeping only the middle 40 columns and first 56 rows (remember, each row/column is 28 pixels after resizing). Save this resized and cropped image as `sheet` again. Display it to confirm your transformations worked as expected.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+sheet <- resize(sheet, w = 28 * 42) %>%
+  # Skip column 1 and 42, only first 56 rows, all channels
+  .[(1*28):(41*28) + 1, 1:(28*56) + 1, ]
+# display(sheet)
+```
+:::
+
+We also want each digit to be grayscale with white as "on" and black as "off". In its current format, it's the opposite, so we need to invert the current pixel intensities for all channels by subtracting them from 1.
+
+**Your task:** Invert `sheet` by subtracting all values from 1. Once done, convert it to grayscale using the `channel` function.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r}
+sheet <- channel(1 - sheet, 'gray') # nice and simple :)
+```
+:::
+
+With the sheet pre-processed, we can get to splitting each digit into its own Image, and stacking them into separate frames. I'll write some boilerplate for this which loops over rows and columns.
+
+```{r}
+split.Image <- function(img, nrow = as.integer(floor(dim(img)[2] / 28)), ncol = as.integer(floor(dim(img)[1] / 28))) {
+  lapply(1:ncol, function(col) {
+    lapply(1:nrow, function(row) {
+      img[(28 * (col - 1)):(28 * col - 1) + 1, (28 * (row - 1)):(28 * row - 1) + 1]
+    }) %>% EBImage::combine()
+  }) %>% EBImage::combine()
+}
+```
+
+**Your task:** Split the initial sheet into a 2240 frame image (ie. 56 rows by 40 columns) using the function I provide above. Save the result as `sheet` again. You can check that individual frames now correspond to individual digits by using the `getFrame` function.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r}
+sheet <- split.Image(sheet)
+```
+:::
+
+We'll now binarize our images by applying a global threshold and convert the result to a grayscale image.
+
+**Your task:** Apply a global threshold (ie. by "accepting" pixels with sufficiently large intensity) to each frame in `sheet`. You'll have to play around with a threshold to not accidentally capture the grid background.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r}
+sheet <- sheet > 0.2
+# display(sheet %>% getFrames(1:100) %>% EBImage::combine(), method = 'raster', all = T)
+```
+:::
+
+## Labeling data
+
+We can easily assign labels by inspecting the original sheet of images. Within each column are identical digits, ascending from 0 from left-to-right. We'll use this structure manually match up labels with our image.
+
+**Your task:** Create `labels`, a vector of integer labels for our handwritten digits. They should be in the same order as the original sheet so that they match up 1:1. *Hint:* Using the `rep` function will help.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+# Repeat 0 to 9, 56 times each (to span all rows), and then repeat that 4 times (to span all columns)
+labels <- rep(0:9, each = 56) %>% rep(4)
+```
+:::
+
+We can have a look at all digits with a certain label to confirm that our labeling worked.
+
+**Your task:** Display digits that are labeled as `9` to make sure you've correctly labeled the data. The simplest way to do this is:
+
+1.  Use `getFrames` to get the frames at indices where `labels == 9` (use `which` to find indices)
+2.  Use `EBImage::combine()` to frame-stack those frames into one image
+3.  Use `display` with `all = T` and `method = 'raster'` to display a grid of the selected frames
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+sheet %>% getFrames(which(labels == 9)) %>% EBImage::combine() %>% display(method = 'raster', all = T)
+```
+:::
+
+## Tensorflow/Keras
+
+Although it isn't the primary focus of this workshop, we'll need to install Tensorflow for R to use it for classifications. The way this seems to work in R is by just hooking into Python, so when you setup Tensorflow in R, it just creates a Python environment for you which it uses under-the-hood. You can see the Tensorflow page, [here](https://tensorflow.rstudio.com/). However, the developers have made it easy to get going and it can be mainly installed as any other R package: `install.packages('tensorflow')`. Once completed, `tensorflow::install_tensorflow()` will do the rest of the work (Windows users also need [Anaconda](https://www.anaconda.com/distribution/)). I won't cover setting it up for GPU acceleration (it's the same as setting it up for Python use).
+
+The very first call to {tensorflow} will take some time (presumably it needs to do some Python set up in the background), so be patient :)
+
+The following steps are taken almost verbatim from the Tensorflow basic classification tutorial, [here](https://tensorflow.rstudio.com/tutorials/beginners/basic-ml/tutorial_basic_classification/).
+
+We'll build our classification model using some calls to the Keras library.
+
+```{r}
+library(tensorflow)
+library(keras)
+
+classification_model <- keras_model_sequential() %>%
+  layer_flatten(input_shape = c(28, 28)) %>%
+  layer_dense(units = 128, activation = 'relu') %>%
+  layer_dense(units = 10, activation = 'softmax')
+```
+
+We also specify a loss function, optimizer and metric to monitor.
+
+```{r}
+classification_model %>% compile(
+  optimizer = 'adam', 
+  loss = 'sparse_categorical_crossentropy',
+  metrics = c('accuracy')
+)
+```
+
+The last thing we need to do is create a train/test split. We'll take a 70:30 train/test split of our sheet by sampling frames randomly.
+
+**Your task:** Create a numeric vector, `train_indices` using `sample`. You should generate 1568 (70% of our 2240 images) numbers between 1 and 2240 (without replacement). Use this to create four new variables, `train_images`, `train_labels`, `test_images` and `test_labels`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+set.seed(90210)
+train_indices <- sample(1:floor(0.7 * length(labels)))
+
+train_images <- sheet[, , train_indices]
+test_images <- sheet[, , -train_indices]
+
+train_labels <- labels[train_indices]
+test_labels <- labels[-train_indices]
+```
+:::
+
+The last inconvenient thing is that {EBImage} stores images as a $\text{width}\ x\ \text{height}\ x\ \text{frames}$ vector, but {keras} expects them as $\text{frames}\ x\ \text{width}\ x\ \text{height}$ vectors. We'll need to fix this. Luckily, it's simple enough using the `aperm` function.
+
+**Your task:** Reshape `train_images` and `test_images` so that the stacking dimension (currently the third dimension) becomes the first dimension.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+train_images <- aperm(train_images, c(3, 1, 2))
+test_images <- aperm(test_images, c(3, 1, 2))
+```
+:::
+
+And with everything set up, we're ready to train!
+
+```{r}
+classification_model %>%
+  fit(train_images, train_labels, epochs = 20, verbose = 2)
+```
+
+We can get an idea of our model's performance by testing it on our `test_images`...
+
+```{r}
+classification_model %>% evaluate(test_images, test_labels, verbose = 0)
+```
+
+Or similarly, we can look at the predicted classes...
+
+```{r}
+library(ggplot2)
+
+predicted <- classification_model %>% predict_classes(test_images)
+
+as.data.frame(table(predicted, test_labels)) %>%
+  ggplot(aes(predicted, test_labels, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = sprintf('%1.0f', Freq)), vjust = 0.5, color = 'black') +
+  theme(legend.position = 'none') +
+  scale_fill_distiller(palette = 'GnBu') +
+  coord_equal() +
+  labs(x = 'Predicted', y = 'Real')
+```
+
+And we can look at the images we're mis-classifying...
+
+```{r}
+par(mfcol = c(13, 14))
+par(mar = c(0, 0, 1.5, 0), xaxs = 'i', yaxs = 'i')
+for(i in which(predicted != test_labels)) { 
+  img <- test_images[i, , ]
+  img <- t(apply(img, 1, rev)) 
+  image(1:28, 1:28, img, col = gray((0:255) / 255), xaxt = 'n', yaxt = 'n',
+        main = paste0(test_labels[i], ' (', predicted[i], ')'))
+}
+```

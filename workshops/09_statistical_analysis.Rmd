@@ -1,0 +1,318 @@
+---
+title: "Workshop 9"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(dplyr)
+```
+
+# Introduction
+
+Again, this workshop borrows heavily from [ModernDive](https://moderndive.com), a textbook for learning to perform statistical analysis in R. I highly recommend at least skimming it, or referring back to it as necessary. You can get a deeper understanding of modeling in R by reading Hadley's R for Data Science chapters on modeling, [here](https://r4ds.had.co.nz/model-intro.html). We previously saw how to use `lm` to do regression analysis in R and today we'll cover sampling/bootstrapping and hypothesis testing in R.
+
+## Learning Objectives
+
+1.  We'll cover bootstrapping and confidence intervals (Modern Dive chapters 7 and 8)
+2.  We'll also get familiar with hypothesis testing (Modern Dive chapter 9)
+
+# Sampling
+
+Sampling is at the heart of bootstrapping and generating confidence intervals. We've already seen how we can randomly sample a vector in R by using the `sample` function, and today we'll use it to do bootstrapping and get estimates on population measures.
+
+As you no doubt know, we use statistical analysis to estimate the value of some measurement of some population (population parameter) when we only have one or a few smaller samples to work with (since it's difficult or impossible to collect data on the entire population). However, we'll begin by assuming we have information about the entire population to demonstrate its utility.
+
+The classical example is to consider a big bowl of colored balls.
+
+[![](https://d33wubrfki0l68.cloudfront.net/0868c64eb2998fbe3e3bfccf7ff55e746341baf3/eeab1/images/sampling/balls/sampling_bowl_1.jpg)](https://moderndive.com/7-sampling.html)
+
+We'll use our R expertise to represent this bowl of balls as a vector of 0's (white balls) or 1's (red balls).
+
+**Your task:** Create `balls_population`, a vector of length 500 to represent a bowl of 500 colored balls. Initialize it with 300 white balls (0's) and 200 red balls (1's) that are randomly shuffled throughout the vector. *Hint: useful functions include* `rep` and `sample`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+balls_population <- c(rep(0, 300), rep(1, 200)) %>% sample
+```
+:::
+
+In this case, we know that the ratio of white to red balls is 3:2 (ie. 60% of the balls are white), but what if we weren't able to count all the ball?
+
+**Your task:** Get an estimate on the fraction of white in the bowl by extracting 50 random balls from `balls_population` and computing which fraction of them are white (0).
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+mSample <- sample(balls_population, 50)
+
+sum(mSample == 0) / length(mSample)
+```
+:::
+
+Any given measurement is, by itself, okay, but it's not a reliable estimate of the true population parameter. Every time we randomly select balls, it's subject to some variation. If we do this process of randomly selecting balls and computing the fraction, however, we can start to get a better idea of the real value.
+
+**Your task:** Do this sampling experiment 1000 times by:
+
+1.  Making a `lapply` function call that goes through the numbers 1-1000
+2.  Inside of each call, sample 50 balls and compute the fraction of them that are white.
+3.  Use `unlist` on the result to turn the list of experiments into a vector
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+estimates <- lapply(1:1000, function(x) {
+  mSample <- sample(balls_population, 50)
+  sum(mSample == 0) / length(mSample)
+}) %>% unlist
+```
+:::
+
+We can visualize our estimates in a histogram using {ggplot2} by turning our vector into a data.frame and plotting.
+
+**Your task:** Plot a histogram or a density plot of your 1000 estimates on the ratio of white balls.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+data.frame(estimate = estimates) %>%
+  ggplot(aes(estimate)) + geom_histogram() +
+  theme_classic() + labs(x = 'Percentage of white balls', y = 'Count') +
+  scale_x_continuous(expand = c(0, 0)) + # Get rid of the axis padding
+  scale_y_continuous(expand = c(0, 0))
+```
+:::
+
+We can see that it's roughly normal and centers around the true fraction, 60%.
+
+# Bootstrapping
+
+What if we didn't have the whole population to work with? Can we still make good guesses? We'll transition from base R to using the package {infer} to do some of our analyses - it's what UBC's Masters of Data Science program uses and it interfaces nicely with {dplyr}.
+
+```{r eval=FALSE}
+install.packages('infer')
+library(infer)
+```
+
+{infer} has the built in functions `rep_sample_n` which can reduce our typing overhead above, as well as functions to automatically calculate our sample estimates, generate confidence intervals and visualize results. To get a sense of this, we'll first rewrite our above resampling code as an {infer} pipeline.
+
+**Your task:** Turn your `balls_population` into a data.frame with one column: `color`, which is the ball color (either 1 or 0). We can then create an {infer} pipeline to do our repeated sampling by:
+
+1.  First `mutate`-ing our color to turn it into a factor with labels `white` and `red` (unfortunately, {infer} doesn't support numeric response variables)
+2.  Use `rep_sample_n` to create 1000 random resamples (with replacement) of size 50
+3.  Use `specify` to tell {infer} that `color` is our response variable and we want to calculate the fraction of white balls (ie. the "successful" discovery is "white").
+4.  Use `calculate` to calculate the `prop`ortion of balls that were "successful"
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+balls_population <- data.frame(color = balls_population) %>%
+  mutate(color = factor(color, levels = 0:1, labels = c('white', 'red')))
+
+balls_population %>%
+  rep_sample_n(50, TRUE, 1000) %>%
+  specify(response = color, success = 'white') %>%
+  calculate('prop')
+```
+:::
+
+Now that we're familiar with the verbs available in {infer}, let's use it to do our bootstrapping.
+
+Bootstrapping is the process of making repeated estimates using our single sample (a representative example of our population) to try to extract more information about the population as a whole. We'll first take a representative sample of our `balls_population` to simulate the idea of only having a smaller sample.
+
+**Your task:** Take a sample of 100 rows of `balls_population` using {dplyr}'s `slice_sample`. Save this to `balls_sample`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+balls_sample <- slice_sample(balls_population, n = 100)
+```
+:::
+
+Now we can perform bootstrapping by repeatedly drawing a bootstrap sample (ie. a sample of our sample, with replacement) from `balls_sample`.
+
+**Your task:** Bootstrap over your `balls_sample` to create 1000 bootstrap estimates of the fraction of balls that are white by:
+
+1.  First `specify`ing your `response` and `success`
+2.  Then `generate`-ing 1000 bootstrap replicates, which are resamplings of the same size of your sample, but with replacement
+3.  And then `calculate`-ing the proportion of ball that are white.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+balls_sample %>%
+  specify(response = color, success = 'white') %>%
+  generate(1000, type = 'bootstrap') %>%
+  calculate('prop')
+```
+:::
+
+## Confidence Intervals
+
+So what is the point of doing this repeated resampling? Well, it allows us to generate a range of possible values for our sample statistic, which we can use to make inferences about the population (which we were unable to get access to for financial/logistical reasons). We can quantify the range in which the true population parameter lies with a confidence interval (typically 95%).
+
+Again, {infer} provides a very simply way to do this by simply chaining on a call to `get_confidence_interval`.
+
+**Your task:** Calculate a 95% bootstrap confidence interval using your bootstrap distribution, which you calculated above.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+balls_sample %>%
+  specify(response = color, success = 'white') %>%
+  generate(1000, type = 'bootstrap') %>%
+  calculate('prop') %>%
+  get_confidence_interval()
+
+# If we wanted to do this in base R, we could have used the quantile function to calculate which data is contained within the middle 2.5% and 97.5% (ie. quantile(DATA, c(0.025, 0.975)))
+```
+:::
+
+{infer} also has a method, `visualize`, which generates a histogram of your bootstrap distributions for you to inspect, which you can also shade with a confidence interval (`shade_confidence_interval`)
+
+```{r eval=FALSE}
+balls_sample %>%
+  specify(...) %>%
+  generate(...) %>%
+  calculate(...) %>% {
+    visualize(.) + shade_confidence_interval(get_confidence_interval(.))
+  }
+```
+
+# Hypothesis Testing
+
+Hypothesis testing allows us to state whether or not there is sufficient evidence to suggest a statistically significant deviation from a null hypothesis. In other words, it allows us to make reasoned guesses about whether our data diverges from a given "uninteresting" model.
+
+We can again do this kind of analysis again using {infer} using the same kind of pipeline as before to do a permutation test. Intuitively, we first `specify` the variables we're interested in studying, `hypothesize` what the relationship would look like in the uninteresting (null) model, `generate` our permutations to create a null model, `calculate` our test statistics and then use these to determine how surprising it is to see our measurement.
+
+I strongly recommend checking out [this website](https://www.jwilber.me/permutationtest/) for a visual and intuitive example of how this process works. We'll work through the example there, here in R.
+
+First, we'll start with our sample of alpacas:
+
+```{r}
+alpacas <- data.frame(ID = LETTERS[1:24],
+                      group = rep(c('treatment', 'control'), each = 12),
+                      wool_quality = c(7.7, 8.3, 7.2, 8.3, 7.4, 4.8, 4.1, 6.2, 4.4, 7.1, 4.3, 5.8, 4.6, 4.2, 4.6, 3.9, 5.6, 4.4, 4.1, 2.8, 3.8, 5.4, 5.1, 5.8))
+```
+
+We can first eyeball the values to see if there's a perceivable difference in wool quality following shampoo treatment:
+
+**Your task:** Make a boxplot that depicts the wool quality per experimental group of alpacas.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+alpacas %>%
+  ggplot(aes(group, wool_quality, fill = group)) +
+  geom_boxplot() +
+  theme_classic() + theme(legend.position = 'none') +
+  labs(x = 'Treatment Group', y = 'Wool Quality')
+```
+:::
+
+But to formally test whether the perceived difference is statistically significant or not, we should do a statistical test. Formally, we want to test to see if the average wool quality of the treated alpacas is higher than the wool quality of the control group. So our null hypothesis is $H_0: \text{mean(wool_quality}_{control}\text) \geq \text{mean(wool_quality}_{treatment}\text)$, or equivalently, $H_0: \text{mean(wool_quality}_{control}\text) - \text{mean(wool_quality}_{treatment}\text) \geq 0$. Our observed test statistic is first computed:
+
+**Your task:** Calculate `test_statistic`: the difference between the mean wool quality of the treatment and control groups.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+test_statistic <- alpacas %>%
+  group_by(group) %>%
+  summarize(mean_wool_quality = mean(wool_quality)) %>%
+  pull(mean_wool_quality) %>%
+  diff
+```
+:::
+
+We'll now follow our intuitive workflow to decide if our apparent difference is significant or not.
+
+As a reminder, we first `specify` the variables we're interested in studying, `hypothesize` what the relationship would look like in the uninteresting (null) model, `generate` our permutations to create a null model, `calculate` our sample statistics and then use these to determine how surprising it is to see our measurement. We already have a hypothesis formulated and an idea of how to calculate our sample statistics, so we should have no issues.
+
+**Your task:** Implement the workflow above.
+
+1.  Using `alpacas`, set up an {infer} pipeline by `specify`ing the variables as a formula. Recall from last time how we write formulas with the response on the left of a tilde (\~) and the explanatory variables on the right.
+2.  Then `hypothesize` that the two variables you specified are `independent`
+3.  `generate` 1000 permutations under the null model
+4.  `calculate` a sample statistic for each permutation, which is the difference in group means (see `?calculate` if confused)
+5.  `visualize` the resulting distribution of test statistics
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+alpacas %>%
+  specify(wool_quality ~ group) %>%
+  hypothesize('independence') %>%
+  generate(1000, 'permute') %>%
+  calculate('diff in means', order = c('treatment', 'control')) %>% {
+    visualize(.) +
+      shade_confidence_interval(get_confidence_interval(.)) +
+      geom_vline(xintercept = test_statistic, color = 'red')
+  }
+```
+:::
+
+This visualization can show us that it is unlikely to receive a test statistic at least as extreme as what we saw by chance, or in other words, there's a low probability that the observed difference in wool quality is due to chance. We can quantify this with a *p-*value by using {infer}'s `get_p_value` function. Since our hypothesis is directional, we need to specify the tail we care about.
+
+**Your task:** Instead of visualizing the distribution above, calculate a *p-*value for your observed `test_statistic`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+alpacas %>%
+  specify(wool_quality ~ group) %>%
+  hypothesize('independence') %>%
+  generate(1000, 'permute') %>%
+  calculate('diff in means', order = c('treatment', 'control')) %>%
+  get_p_value(test_statistic, 'right')
+```
+:::
+
+Of course, there are a large number of other statistical tests you can perform in R that aren't permutation tests, including `anova`, `chisq.test`, `fisher.test`, `t.test` and etc. If you know the test flavor you want to run, they're relatively straightforward to implement.

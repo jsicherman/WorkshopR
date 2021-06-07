@@ -1,0 +1,319 @@
+---
+title: "Workshop 12"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(dplyr)
+```
+
+# Introduction
+
+Often in the world of data science, you face a problem where you're given a ton of data. This data is usually impossible to deal with manually due to its scale, and it can be a significant challenge to process it computationally without the right strategies. Today, we'll introduce the {data.table} package which is an enhancement to base R's data.frames. Their new syntax and under-the-hood optimizations allow us to work with data in much more efficient ways and you may find yourself preferring the grammar of {data.table} to that of {dplyr}. They have a collection of vignettes [here](https://cran.r-project.org/web/packages/data.table/vignettes/) that I encourage you to look at for more advanced topics.
+
+## Learning Objectives
+
+1.  Learn how to work with data.tables
+2.  Re-learn {dplyr}'s `mutate`, `summarize`, `group_by` and other basic grammar in the {data.table} paradigm
+
+# Setting up
+
+As usual, we need to install {data.table}
+
+```{r eval=FALSE}
+install.packages('data.table')
+```
+
+```{r message=FALSE}
+library(data.table)
+```
+
+# What is a data.table?
+
+Like data.frames, data.tables are multidimensional data structures that can hold heterogeneous types. You can see their inherent similarities in the way they're constructed and the way they `print`:
+
+```{r}
+print(data.frame(name = c('Jordan', 'John', 'Jane'), ID = 1:3))
+
+print(data.table(name = c('Jordan', 'John', 'Jane'), ID = 1:3))
+```
+
+We can work with them in much the same way we work with a data.frame, using the `$`, `[[` and `[` subsetting notation to extract columns and cells. In fact, since data.tables are built as extensions of data.frames, we can (usually) use them in other methods as if they were data.frames. For example:
+
+```{r}
+# {dplyr} works on data.frames (technically, tibbles)
+data.frame(A = 1:10, B = LETTERS[1:10], C = rep(LETTERS[1:2], each = 5)) %>%
+  group_by(C) %>%
+  summarize(mean_A = mean(A))
+
+# You can also input data.tables
+data.table(A = 1:10, B = LETTERS[1:10], C = rep(LETTERS[1:2], each = 5)) %>%
+  group_by(C) %>%
+  summarize(mean_A = mean(A))
+```
+
+## Differences from data.frame
+
+Despite its many similarities, data.table has two major differences you should be aware of (when compared to data.frames): 1. The grammar of data.tables 2. Memory consumption
+
+We'll look at each of these in turn.
+
+### data.table Grammar
+
+Unlike data.frames, we can subset using square brackets in an enhanced way using the syntax:
+
+```{r eval=FALSE}
+data.table(...)[i, j, by]
+
+# (compared to)
+data.frame(...)[row, column]
+```
+
+While this looks like a subtle difference, the effects are profound. Also note that you don't need to always pass empty arguments that you don't want to use. For example, if we just want to specify `i`, we can do `data.table(...)[i]` instead of `data.table(...)[i, , ]`.
+
+#### i
+
+The first argument, `i`, is for filtering/subsetting. In this, you specify rows to select identically to how you would do it in {dplyr}'s `filter` function.
+
+**Your task:** Rewrite this code in the {data.table} grammar. *Hint: You can convert data.frames (or tibbles) to data.tables using* `as.data.table`.
+
+```{r eval=FALSE}
+mData <- vroom::vroom('data/covid-19-polls-master/covid_approval_polls_adjusted.csv')
+
+mData_gradeA <- mData %>%
+  filter(grade == 'A')
+```
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+mData <- vroom::vroom('data/covid-19-polls-master/covid_approval_polls_adjusted.csv') %>% as.data.table
+
+mData_gradeA <- mData[grade == 'A']
+```
+:::
+
+**Your task:** Using `mData` from the previous example, write both the {data.table} and {dplyr} versions of the code to filter by selecting only the rows that have a `samplesize` of at least `1000` and a `weight` of at least `0.6`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+# First, {dplyr}
+mData %>%
+  filter(samplesize >= 1000,
+         weight >= 0.6)
+
+# And {data.table}
+mData[samplesize >= 1000 & weight >= 0.6]
+```
+:::
+
+I personally prefer to work with data.tables instead of the corresponding tidyverse/{dplyr} functions because it's quicker to type. With this simple example, you may not prefer it just yet, but my hope is that you'll soon see how powerful this is.
+
+#### j
+
+Subsetting alone is not very powerful. Usually we want to manipulate our data. In {dplyr}, we learned how to do this using a few key function: `select`, `mutate` and `summarize`. In {data.table}, these functions are all collected into the `j` parameter of the square bracket notation.
+
+First, we can see how to `select` columns. In base R, we used (among other ways), the following syntax: `data.frame(…)[, c("columns", "you", "want")]`. In {dplyr} verbs, this looked like `data.frame(…) %>% select(columns, you, want)`. {data.table} looks more like base R with minor differences that we'll see soon.
+
+```{r}
+company_data <- data.table(ID = 1:10, initials = paste0(sample(LETTERS, 10, T), '.', sample(LETTERS, 10, T), '.'), score = rnorm(10, 80, 5))
+
+# Select the ID and score column
+
+# Base R:
+company_data[, c('ID', 'score')]
+
+# {dplyr}
+company_data %>%
+  select(ID, score)
+
+# {data.table}
+company_data[, .(ID, score)]
+```
+
+Recall that in {data.table}, we pass arguments in the form `[i, j, by]`. Since we don't want to filter, we skip `i` (by leaving it empty and just putting a comma), and then tell it which columns we want to select by putting their names inside of `.()`.
+
+`j` can be used for more than just `select`ing, though. In brief, instead of passing *names* to `j`, you can pass *expressions*. To make that more concrete, consider the following examples:
+
+```{r}
+# We can specify resulting column names
+company_data[, .(employee_ID = ID, exam_score = score)]
+
+# We can do mutations
+company_data[, .(ID, initials, score, score_percentile = trunc(rank(score)) / length(score))]
+
+# We can do summaries
+company_data[, .(mean_score = mean(score), sd_score = sd(score))]
+```
+
+The highly flexible nature of `j` means that we have to remember fewer functions and can write code faster.
+
+**Your task:** Remind yourself of what each of the above examples is doing by rewriting them in {dplyr} verbs.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+company_data %>%
+  rename(employee_ID = ID,
+         exam_score = score)
+
+company_data %>%
+  mutate(score_percentile = trunc(rank(score)) / length(score))
+
+company_data %>%
+  summarize(mean_score = mean(score),
+            sd_score = sd(score))
+```
+:::
+
+For those of you who are particularly attentive, you may have noticed that the `mutate` example above is actually more convenient to write in {dplyr} syntax because we don't have to re-specify the unchanged columns... Or so it seems!
+
+##### Modify in-place
+
+The other one of the huge advantages in {data.table} is its ability to modify in-place. This refers to how the computer handles it in memory. We learned that generally, R takes a copy of the data, makes the changes, and then you have to assign it back to a name to keep the result *a la* `mData <- mData %>% mutate(…)`. A better strategy is to make no copies of the underlying data and instead, only update any values that change (ie. modification in-place). This is exactly what {data.table} permits.
+
+The modify in-place operator is given as `:=` (of the form `A := B`). We can use it inside of a data.table to make updates directly inside of the original data. This preserves all the original information in the data.table while adding the new columns rapidly. We can then rewrite our {data.table} style mutation as:
+
+```{r}
+company_data[, score_percentile := trunc(rank(score)) / length(score)]
+```
+
+It's important, so I'll say it again. This occurs **in-place**. We do not need to and should not do any reassignments (ie. `company_data <- company_data[…]`) because the `:=` has actually changed the underlying data.
+
+If you want to avoid modifying the original data, you can use the `copy` function to first make a copy and then do your modification in-place.
+
+```{r}
+company_data %>% copy %>%
+  .[, score_percentile := trunc(rank(score)) / length(score)]
+```
+
+{data.table} makes the results of these modifications "invisible", so they won't `print` by default. You can get around this by explicitly adding a `print` command, or suffix it with `[]`.
+
+**Your task:** In the [avocado case study](putting-it-all-together.Rmd), we followed a simple recipe to show that avocado prices in the US follow Benford's law. Now that we're experts with R, let's rewrite it into one {data.table} pipeline. You should load the data from `data/avocado.csv` and then:
+
+1.  Convert `Total Volume` to a character
+2.  `substring` that character representation to get the first digit
+3.  Add a column for a simulated digit between 1-9, according to$P(d) = \log_{10}(1+\frac{1}{d})$
+4.  Select only the columns for the first digit and the simulated digit
+5.  `melt` this so that it's ready for plotting
+6.  Use `ggplot` to make histograms (using `stat = 'count', position = 'dodge'` to distinguish between the groups)
+
+Try to do this all in one pipeline.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+mData <- vroom::vroom('data/avocado.csv') %>% as.data.table
+
+mData %>%
+  # Modify Total Volume (in place)
+  .[, `Total Volume` := as.character(`Total Volume`)] %>%
+  # Add a first_digit column (in place)
+  .[, first_digit := substring(`Total Volume`, 0, 1)] %>%
+  # Add a simulated digit (in place)
+  .[, digit_sim := sample(1:9, nrow(.), T, log10(1 + 1 / 1:9))] %>%
+  # Select those two columns (this is the first line that makes a copy)
+  .[, .(first_digit, digit_sim)] %>%
+  melt(measure.vars = 1:2) %>%
+  ggplot(aes(value, fill = variable)) +
+  geom_histogram(stat = 'count', position = 'dodge')
+```
+:::
+
+#### by
+
+Hopefully at this point you see some benefit to using data.tables instead of data.frames. The last remaining basic question is how to use groupings (the sort we'd construct using `group_by` in {dplyr}). This is the third and final parameter in data.table: `by`. It works nearly identical to how you might expect, in that when you pass a `by` parameter, all calculations run as if they were grouped by that parameter.
+
+```{r}
+# By passing Species to the "by" argument, we get mean calculations grouped by Species
+iris %>% as.data.table %>%
+  .[, .(mean_petal_length = mean(Petal.Length),
+        mean_sepal_length = mean(Sepal.Length)), Species]
+
+# For comparison to {dplyr} verbs
+iris %>%
+  group_by(Species) %>%
+  summarize(mean_petal_length = mean(Petal.Length),
+            mean_sepal_length = mean(Sepal.Length))
+```
+
+We can also pass expressions to `by`, like we did to `j`, to calculate more complex groupings.
+
+```{r}
+iris %>% as.data.table %>%
+  .[, .(mean_sepal_width = mean(Sepal.Width),
+        mean_petal_length_to_width = mean(Petal.Length / Petal.Width)), .(is_wide = Petal.Width > 1)]
+```
+
+We can also use a special variable, `.N`, to compute the number of observations in each group.
+
+```{r}
+iris %>% as.data.table %>%
+  .[, .N, .(is_wide = Petal.Width > 1, Species)]
+```
+
+And so, in the simple syntax of `[i, j, by]`, we can do all the basic data processing that we learned in {dplyr}. We can lastly look to see that this is actually faster to compute, too.
+
+### Speed comparison
+
+We won't do any formal speed comparisons. For that, you can see a comprehensive analysis [here](https://h2oai.github.io/db-benchmark/). Instead, we'll just create a large data.table and calculate grouped means and examine how long we'd be waiting for our code to run.
+
+```{r eval=FALSE}
+# 10 million observations grouped in different ways with 100 groups of roughly equal size
+DT <- data.table(measurement = rnorm(1e7),
+                 group1 = sample(1:100, 1e7, T),
+                 group2 = sample(1:100, 1e7, T),
+                 group3 = sample(1:100, 1e7, T))
+
+# Calculate single grouped means using data.table
+start <- Sys.time()
+DT[, mean(measurement), group1]
+print(Sys.time() - start)
+
+# Calculate single grouped means using dplyr
+start <- Sys.time()
+DT %>%
+  group_by(group1) %>%
+  summarize(mean(measurement))
+print(Sys.time() - start)
+
+
+
+# Calculate multi-grouped means using data.table
+start <- Sys.time()
+DT[, mean(measurement), .(group1, group2)]
+print(Sys.time() - start)
+
+# Calculate multi-grouped means using dplyr
+start <- Sys.time()
+DT %>%
+  group_by(group1, group2) %>%
+  summarize(mean(measurement))
+print(Sys.time() - start)
+```
+
+My computer can't handle much larger queries, but you can imagine with increasing data complexity (more columns, more groups, more things to calculate), {data.table} scales much better than {dplyr} does.

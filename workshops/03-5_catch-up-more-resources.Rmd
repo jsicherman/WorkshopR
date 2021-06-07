@@ -1,0 +1,76 @@
+---
+title: "Workshop 3.5"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+We've learned a lot in a short amount of time. We'll dedicate today to catching up on the things we've learned so far and focus on solidifying our understanding of them.
+
+# Introduction
+
+## What we know so far
+
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Description                     | Function(s)                      | Example                                                     |
++=================================+==================================+=============================================================+
+| Creating vectors and ranges     | `c`, `a:b`, `seq(a, b)`          | `c(1, 3, 5)`, `1:5`, `seq(1, 5, 2)`                         |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Subsetting vectors and lists    | `$`, `[]`, `[[]]`                | `data$entry`, `data[1]`                                     |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Creating data.frames            | `data.frame`                     | `data.frame(A = …, other = …)`                              |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Subsetting data.frames          | `$`, `[]`                        | `data$column`, `data[row, column]`                          |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Getting help                    | `?`                              | `?pbirthday`                                                |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Installing and loading packages | `install.packages`, `library`    | `install.packages('A')`, `library(A)`                       |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Loading data files              | `vroom`, `read_excel`, `readRDS` | `vroom('path/to/data.csv')`                                 |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Adding/modifying columns        | `mutate`                         | `data %>% mutate(column = value)`                           |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Summarizing columns             | `summarise`, `summarize`         | `data %>% summarize(column = value)`                        |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Filtering entries               | `filter`                         | `data %>% filter(condition)`                                |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Grouping entries                | `group_by`                       | `data %>% group_by(column)`                                 |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Conditionals in pipelines       | `if_else`                        | `if_else(1 == 2, 'yes!', 'no!')`                            |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Many conditionals in pipelines  | `case_when`                      | `case_when(A == B ~ 'eqB', A == C ~ 'eqC', …, T ~ 'other')` |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Checking existence in a vector  | `%in%`                           | `160 %in% seq(1, 400, 1.5)`                                 |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| Connecting multiple data.frames | `merge`                          | `merge(data1, data2, by = 'column')`                        |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+| "Tidying" data                  | `melt`, `dcast`                  | `melt(data1)`, `dcast(data2, LHS ~ RHS)`                    |
++---------------------------------+----------------------------------+-------------------------------------------------------------+
+
+Make sure you have a solid understanding of these functions as they will, in large part, serve as the foundation of most work you do in R. If you can become fluent with them now, you'll be much less frustrated later on!
+
+Remember that there's a lot of data provided in R so you can do a lot of toy analysis without having to find any data first. If you get sick of the data from the exercises I provide, try doing some analysis on these data!
+
+-   See `library(help = 'datasets')`
+
+-   `tidyr::` will show some useful datasets for brushing up on your data tidying techniques
+
+-   `dplyr::starwars`, `dplyr::storms` are useful for `mutate`, `summarize`, etc.
+
+## More Resources
+
+Learning a new language is hard - it's easy to forget syntax, behavior of methods and etc. The best thing you can do is practice often by doing your own analysis either for fun or work. Beyond this, **don't hesitate to check StackOverflow, Google, etc.** if you need! Programmers of all levels do it.
+
+While you're learning, so-called "cheat sheets" are invaluable resources. Access some that the RStudio team and community make available [here](https://rstudio.com/resources/cheatsheets/). So far, I recommend:
+
+1.  [Base R](https://raw.githubusercontent.com/rstudio/cheatsheets/master/base-r.pdf)
+2.  [Data transformation](https://raw.githubusercontent.com/rstudio/cheatsheets/master/data-transformation.pdf)

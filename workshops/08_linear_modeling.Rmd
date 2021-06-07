@@ -1,0 +1,336 @@
+---
+title: "Workshop 8"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(dplyr)
+```
+
+# Introduction
+
+We'll have a look at some of the basic tools for statistical analysis in R. This workshop borrows heavily from [ModernDive](https://moderndive.com), a textbook for learning to perform statistical analysis in R. I highly recommend at least skimming it, or referring back to it as necessary. You can get a deeper understanding of modeling in R by reading Hadley's R for Data Science chapters on modeling, [here](https://r4ds.had.co.nz/model-intro.html).
+
+## Learning Objectives
+
+1.  We'll learn some techniques for single and multiple linear regression (Modern Dive chapters 5 and 6)
+2.  In future workshops, we'll cover bootstrapping and confidence intervals (Modern Dive chapter 8) and finally, hypothesis testing (Modern Dive chapter 9)
+
+# Data Loading
+
+In this workshop, we'll use two datasets downloaded from Kaggle and stored in the `data` folder:
+
+1.  `data/country_vaccinations.csv` from [here](https://www.kaggle.com/gpreda/covid-world-vaccination-progress).
+2.  `data/countries_of_the_world.csv` from [here](https://www.kaggle.com/fernandol/countries-of-the-world).
+
+**Your task:** Load these two datasets. Give them the same names as their filename (ie. **country_vaccinations** and **countries_of_the_world**). Inspect the datasets using your usual methods.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+library(vroom)
+country_vaccinations <- vroom('data/country_vaccinations.csv')
+countries_of_the_world <- vroom('data/countries_of_the_world.csv')
+```
+:::
+
+If you did your usual inspections, you may have noticed an issue with how `countries_of_the_world` got loaded: it uses the comma as a decimal mark, but {vroom} didn't detect it and they all got parsed as characters instead of numerics. We can fix this by telling `vroom` some `locale`-specific defaults. Use `?locale` to see what you can modify, and then try to load it again.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+countries_of_the_world <- vroom('data/countries_of_the_world.csv', locale = locale(decimal_mark = ','))
+```
+:::
+
+**Your task:** The package {janitor} offers a convenient way to clean up messy column names (of which we have many in `countries_of_the_world`). This is enabled via. the `clean_names` function. Install {janitor}, load it, and then use it to clean up the column names of `countries_of_the_world`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+# install.packages('janitor')
+library(janitor)
+
+countries_of_the_world <- clean_names(countries_of_the_world)
+```
+:::
+
+# Linear Regression
+
+Regression is a technique to model the relationship between variables. In the simple case of linear regression, it models something similar to `y` as a function of `x` (ie. `f(x) = y`). We can use this to predict an outcome based on some explanatory variable (ie. risk of developing cancer based on some risk factor), or to simply explain and quantify how different features are related.
+
+In general, performing this analysis is very straightforward in R, and most of your efforts will be directed towards the initial tidying and eventual interpretation of your results.
+
+One relationship we may wish to model is between a country's GDP per capita and the prevalence of cell phones. Intuitively, we may expect there to be a strong positive correlation between these two variables, which we can quickly explore in our `countries_of_the_world` dataset.
+
+**Your task:** Plot the relationship between each country's GDP and number of cell phones per population. You should get something that looks like the following:
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+
+countries_of_the_world %>% ggplot(aes(gdp_per_capita, phones_per_1000)) + geom_point() + theme_classic() + labs(x = 'GDP per capita', y = 'Phones per 1000 people')
+```
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+countries_of_the_world %>% ggplot(aes(gdp_per_capita, phones_per_1000)) + geom_point() + theme_classic() + labs(x = 'GDP per capita', y = 'Phones per 1000 people')
+```
+:::
+
+We can quickly quantify the strength of the relationship using the correlation coefficient, as we saw before using the `cor` function, using the `use` parameter to ignore pairs with missing data:
+
+```{r}
+cor(countries_of_the_world$gdp_per_capita, countries_of_the_world$phones_per_1000, use = 'complete')
+```
+
+We can also explicitly model this relationship using simple linear regression using the `lm` function (which stands for **l**inear **m**odel). `lm` accepts a formula to define the relationship of interest, of the form `response ~ term(s)`. Thus, if we know we want to study `phones_per_1000` as a function of `gdp_per_capita`...
+
+**Your task:** Use `lm` to fit a model to this data, saving the results to `fit_results`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r}
+fit_results <- lm(phones_per_1000 ~ gdp_per_capita, countries_of_the_world)
+```
+:::
+
+`fit_results` is a special "lm" object which contains information about how the specified model fits the data. You can `print` it to see basic information about it, or use `summary` to get a more comprehensive overview. Of particular interest are the p-values associated with each coefficient (`Pr(>|t|)`), for which significant values mean that there is some statistical evidence that the value of the coefficient is different from 0, the coefficient's estimate (`Estimate`), which indicates the change in the modeled response for a single unit change in the modeled term, and the residuals (which can be extracted via. `residuals(fit_results)`) and indicate the per-observation error in the fitted model.
+
+R also has a woefully underused plot function for these "lm" objects to quickly inspect diagnostic information about the fit. Just call `plot` on the lm object to see for yourself.
+
+We can also use {ggplot2} to rapidly visualize the fit of a linear model on our original data by adding a `geom_smooth` layer to our scatterplot. Observe the final addition to our previous plot (where we specify that ggplot should use `lm` for modeling, and suppress plotting the standard errors (`se = FALSE`).
+
+```{r warning=FALSE, message=FALSE}
+countries_of_the_world %>% ggplot(aes(gdp_per_capita, phones_per_1000)) + geom_point() + theme_classic() + labs(x = 'GDP per capita', y = 'Phones per 1000 people') + geom_smooth(method = 'lm', se = F)
+```
+
+## Multiple Linear Regression
+
+When we use multiple terms to predict one response variable, our simple linear regression gets upgraded to multiple linear regression. Programmatically, this isn't much different that the simple linear regression case: we can still use `lm` and we can still pass everything as a normal formula. However, we need to know how to specify a formula with multiple terms.
+
+We can actually skip this step altogether if we just want to get a visual understanding of the relationship. Take, for example, we want to study a similar relationship as in the previous section (GDP per capita on phones per population), but we want to analyze if there are differences between geographical regions. This is a multiple linear regression with one numeric (GDP per capita) and one categorical (region) explanatory variable.
+
+{ggplot2} will automatically fit a linear model with interaction for these variables if you specify a grouping variable in the aesthetics (like `color`).
+
+**Your task:** Create a plot of phones per 1000 people as a function of GDP per capita (like above), but also color data points by `region`. You may also choose to facet by region.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+countries_of_the_world %>%
+  mutate(region = stringr::str_to_title(stringr::str_trim(region))) %>%
+  ggplot(aes(gdp_per_capita, phones_per_1000, color = region)) + geom_point() + theme_classic() + labs(x = 'GDP per capita', y = 'Phones per 1000 people', color = 'Geographical Region') + geom_smooth(method = 'lm', se = F)
+
+# It is sometimes helpful to facet when colors are hard to distinguish.
+
+countries_of_the_world %>%
+  mutate(region = stringr::str_to_title(stringr::str_trim(region))) %>%
+  ggplot(aes(gdp_per_capita, phones_per_1000, color = region)) + geom_point() + theme_classic() + labs(x = 'GDP per capita', y = 'Phones per 1000 people') + geom_smooth(method = 'lm', se = F) + facet_wrap(~region) + theme(legend.position = 'none')
+```
+:::
+
+Because the lines aren't parallel, we can see evidence that the relationship between GDP per capita and phones per 1000 people is not constant across different geographical regions. We can quantify this explicitly using `lm` ourselves.
+
+First, we'll look at what happens when we perform `lm` using a categorical predictor rather than a numerical one.
+
+### But first, linear modeling with a categorical variable
+
+**Your task:** Fit a linear model predicting a county's number of phones per 1000 people as a function of the geographic region. Extract the coefficients using `coef` and try to explain what they mean.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+lm(phones_per_1000 ~ region, countries_of_the_world) %>% coef
+```
+:::
+
+You'll see that for the 11 regions in our dataset, we have 10 coefficients and 1 intercept. We can inspect the names of the coefficients and we notice that the first region (Asia, excluding the near east) is missing. This is because `lm` chooses the first category (the first level if it's a factor, or the first string value found) as the intercept, and reports everything else relative to this.
+
+Do we have an intuition about what the values it outputs are? Let's inspect.
+
+**Your task:** Use your knowledge of data wrangling in R to create a summary table of `countries_of_the_world` with two columns: the region, and the mean number of phones per 1000. In other words, calculate the mean of `phones_per_1000` for each `region`. Save this as `absolute_means`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+absolute_means <- countries_of_the_world %>%
+  group_by(region) %>%
+  summarize(mean_phones_per_1000 = mean(phones_per_1000, na.rm = T))
+```
+:::
+
+**Your task:** Now create `relative_means`, which has the mean recorded relative to the first row. For example, if your `absolute_means` looked like:
+
+```{r echo=FALSE}
+data.frame(ID = LETTERS[1:5], mean = c(100, 50, 120, 0, 100))
+```
+
+The corresponding `relative_means` would be:
+
+```{r echo=FALSE}
+data.frame(ID = LETTERS[1:5], mean = c(0, -50, 20, -100, 0))
+```
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+relative_means <- absolute_means %>%
+  mutate(mean_phones_per_1000 = mean_phones_per_1000 - .$mean_phones_per_1000[1])
+```
+:::
+
+**Your task:** Now compare `relative_means` to the coefficients we outputted above. Now do you have a sense of what the coefficients are meant to represent?
+
+When we fit a linear model using a categorical variable as the predictor, we obtain conditional means (that is, means conditioned on the category) as the estimate, since the "best guess" at what any given real data is for each category is simply the mean of that category (since we'll, on average, be as close as possible).
+
+### Ok, now multiple linear regression
+
+As mentioned before, we need to know how to write formulae including multiple predictor variables in order to do multiple linear regression. There are a few symbols we may need for this.
+
+One simple case is for when you want to specify an additive effect, where each variable is independent and you plan to create a model where each has its own coefficient. We commonly use this in differential expression analysis (ie. when we specified that `batch` and `PMI` are both important but unrelated covariates). As expected, we create this using the `+` symbol (ie. `response ~ A + B`).
+
+If the variables in question have a suspected interaction that we want to model, we instead use the `:` symbol, which tells R that the two variables on either side of the colon interact and it should model one term for each interaction (ie. `response ~ A:B`).
+
+And finally, another common case is when we want to specify the crossing of two variables. In other words, we want to model the independent effects of each variable, as well as their interactions. This is done using the `*` symbol (ie. `response ~ A*B`), which is equivalent to the model `response ~ A + B + A:B`.
+
+| Symbol | Example   | Use                 | Equivalency       |
+|--------|-----------|---------------------|-------------------|
+| `+`    | `x1 + x2` | Independent effects | N/A               |
+| `:`    | `x1:x2`   | Interaction effects | N/A               |
+| `*`    | `x1*x2`   | Crossings           | `x1 + x2 + x1:x2` |
+
+Which symbol is appropriate for our use? Well, we saw in our plot that the regression line for each region not only had a different intercept, but also a different slope. This indicates that we may be interested in the more complicated model with crossings.
+
+**Your task:** Create two equivalent linear models that predict `phones_per_1000` using the predictors `gdp_per_capita` and `region` as well as their interaction. Save the results as `fit_1` and `fit_2`. Confirm that the coefficients for each fit are equivalent.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+fit_1 <- lm(phones_per_1000 ~ gdp_per_capita * region, countries_of_the_world)
+fit_2 <- lm(phones_per_1000 ~ gdp_per_capita + region + gdp_per_capita:region, countries_of_the_world)
+
+all(coef(fit_1) == coef(fit_2))
+```
+:::
+
+We can inspect the `summary` of this model fit and interpret the terms. Remember each estimate is always a shift from the intercept.
+
+## Making Predictions
+
+Once we have an object of the class "lm", we can use it to make predictions about new data by using the `predict` function. To it, we first pass our model fit, and then a data frame of new data.
+
+**Your task:** Using the result from our simple linear regression, `fit_results`, predict the number of cell phones per 1000 people for a hypothetical country with a GDP per capita of 42000.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+predict(fit_results, data.frame(gdp_per_capita = 42000))
+```
+:::
+
+For multiple linear regression, this task is virtually the same, but we need to remember to pass all the required variables.
+
+**Your task:** Using the result from our multiple linear regression, `fit_1`, predict the number of cell phones per 1000 people for two hypothetical countries with a GDP per capita of 42000: one in North America (`region == "NORTHERN AMERICA                   "`) and one in Western Europe (`region == "WESTERN EUROPE                     "`). (I know, the region values are pretty ugly).
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+predict(fit_1, data.frame(region = c('NORTHERN AMERICA                   ', 'WESTERN EUROPE                     '), gdp_per_capita = 42000))
+```
+:::
+
+Of course, when you want to train a linear regression model to make these kinds of predictions, you'll more likely want to hold out some data, fit the regression line to your training data and then test to see how well it generalizes on the data you held out. This can be done by first sub`sample`-ing only some observations, fitting the line to this subsample, and then predicting on the data you held out.
+
+**Your task:** Extract data from `countries_of_the_world` for only the region `"LATIN AMER. & CARIB    "`. Then, use `sample` to split this into 60% training data and 40% test data. Save the split data as `data_train` and `data_test`.
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+data_latin <- countries_of_the_world %>% filter(region == "LATIN AMER. & CARIB    ")
+
+# Choose rows to split into each group
+data_split <- sample(1:nrow(data_latin), size = floor(0.6 * nrow(data_latin)))
+
+data_train <- data_latin[data_split, ]
+data_test <- data_latin[-data_split, ]
+```
+:::
+
+**Your task:** Now fit a linear model predicting `phones_per_1000` as a function of `gdp_per_capita` on the training data, and predict the values in the test data. Is your model a good predictor?
+
+```{r}
+# TODO Your code here
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+test_fit <- lm(phones_per_1000 ~ gdp_per_capita, data_train)
+predictions <- predict(test_fit, data_test)
+
+# We can calculate RMSE easily to see how well we do
+RMSE <- sqrt(sum((predictions - data_test$phones_per_1000)^2) / length(predictions))
+
+# Or we can visualize it
+data.frame(prediction = predictions,
+           actual = data_test$phones_per_1000,
+           gdp_per_capita = data_test$gdp_per_capita) %>%
+  ggplot(aes(gdp_per_capita)) +
+  geom_point(aes(y = prediction), color = 'red') +
+  geom_point(aes(y = actual), color = 'green') +
+  labs(x = 'GDP per capita', y = 'Phones per 1000 people') +
+  theme_classic()
+```
+:::
+
+With relatively few data points like in this data, we'll naturally struggle to obtain high predictive power (and especially with such a simple model when we suspect there are many other factors that play into the relationship we're trying to model), but you should see that even on this handful of data, we can make decently-fitting models and statistical inferences.

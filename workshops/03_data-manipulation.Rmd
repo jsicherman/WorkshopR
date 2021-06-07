@@ -1,0 +1,378 @@
+---
+title: "Workshop 3"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true
+    code_download: true
+    theme: "flatly"
+    css: "www/css/style.css"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(dplyr)
+```
+
+By now, we've gotten a taste of some of the very useful functions that you'll likely use in most of your data analysis tasks. Today, we'll learn a few more that will allow us to do even more advanced things.
+
+# Introduction
+
+## Learning Objectives
+
+1.  We'll start by learning about the pipe, a popular and useful feature in R.
+
+2.  We'll focus mainly on what I'll call "inline" logic blocks, that is, how to use logical operators inside of your pipelines.
+
+    1.  Next time we'll turn our attention to standard `for` loops, `if/else` blocks and basic error handling
+
+3.  We'll also learn some other more advanced strategies for working with data, including `merge`s
+
+## Piping
+
+{dplyr} introduces a the pipe. By clever design, all {dplyr} functions require the data as their first argument (remember how we called `mutate`, `summarize`, `filter` and `group_by`?). In this way, instead of saving intermediate representations, we can simply *pipe* our data into the next processing step. This has two major advantages:
+
+1.  We don't need to save objects that are in-transit between more useful representations
+2.  It makes our code easier to read (left-to-right, top-to-bottom)
+
+::: {.code}
+The pipe (`%>%`) takes whatever is on the left-hand-side and inserts it as the first argument to the expression in the right-hand-side.
+:::
+
+One simple example of this simplification can be seen below:
+
+```{r}
+gradebook <- c(86.5, 91.0, 70.3, 0.0, 100.0)
+
+grade_mean <- mean(gradebook)
+# Or, as a pipe...
+grade_mean <- gradebook %>% mean()
+```
+
+The pipe faithfully takes `gradebook` from the left and dumps it into the first argument in the `mean` function. The only thing it modifies is the first argument, so you can also pass more as usual.
+
+```{r}
+gradebook <- c(c(86.5, 91.0, 70.3, NA, 100.0))
+
+grade_mean <- gradebook %>% mean(na.rm = T)
+# Which is equivalent to...
+grade_mean <- mean(gradebook, na.rm = T)
+```
+
+You may not immediately see any benefit in this, but when the code becomes more complex, its utility quickly becomes evident.
+
+**Your task:** Rewrite the following code in one single pipeline. You can load the data necessary for this by running the following:
+
+```{r}
+covid_data <- vroom::vroom('data/covid-19-polls-master/covid_approval_polls_adjusted.csv')
+covid_data <- mutate(covid_data,
+                     modeldate = as.Date(modeldate, format = '%m/%d/%Y'),
+                     startdate = as.Date(startdate, format = '%m/%d/%Y'),
+                     enddate = as.Date(enddate, format = '%m/%d/%Y'))
+```
+
+```{r message=FALSE}
+
+covid_data_feb <- filter(covid_data, months(startdate) == 'February')
+covid_data_feb_clean <- mutate(covid_data_feb,
+                               largesamplesize = samplesize > 500,
+                               party = recode(party,
+                                              D = 'Democrats',
+                                              I = 'Independents',
+                                              R = 'Republicans'))
+covid_data_feb_clean_final <- summarise(group_by(covid_data_feb_clean, pollster, party),
+                                        sufficiently_large = sum(largesamplesize) > n() / 3)
+```
+
+::: {.spoiler}
+```{r message=FALSE}
+covid_data_feb_piped <- covid_data %>%
+  filter(months(startdate) == 'February') %>%
+  mutate(largesamplesize = samplesize > 500,
+         party = recode(party,
+                        D = 'Democrats',
+                        I = 'Independents',
+                        R = 'Republicans')) %>%
+  group_by(pollster, party) %>%
+  summarise(sufficiently_large = sum(largesamplesize) > n() / 3)
+```
+:::
+
+### Bonus: Advanced pipes
+
+As you've learned, pipes feed the left-hand argument to the first argument in the right-hand expression. But what if you want to put the piped argument somewhere other than the first parameter? For these scenarios, you can refer to the piped object as `.` (the period). This effectively lets you use the piped object in different places in a function, as the following example demonstrates:
+
+```{r}
+scores <- rnorm(30)
+
+scores %>% abs %>% log(base = sum(.)) # Use the sum of |scores| as the logarithm base.
+# Which is equivalent to...
+log(abs(scores), base = sum(abs(scores)))
+```
+
+Finally, although it is only really useful in a select few instances (and even then, it gets messy quickly so you may prefer to avoid it), since the right-hand-side of pipes accept any general expression, you can do even more interesting things by passing a code block where you can perform interim calculations, print things, and etc. before returning your result. As usual, the `.` is used to refer to the piped object.
+
+```{r}
+my_data <- data.frame(UUID = 1:3, score = rnorm(3))
+
+my_data %>% {
+  print('You can print from here...')
+
+  # You can assign variables here for temporary storage
+  some_temp_value <- .$UUID * .$score
+  mutate(., new_value = some_temp_value)
+}
+```
+
+## Smart pipelines
+
+Now we know some ways to modify data, but this is pretty limiting if we don't have a way to modify *selectively*. Consider one obvious example of this:
+
+```{r}
+room_of_students <- data.frame(name = c('Jordan', 'Francois', 'Natalya', 'Fernando'),
+                               first_language = c('English', 'French', 'Russian', 'Spanish'),
+                               greeting = NA)
+room_of_students
+```
+
+How should we fill in a greeting for these people who all speak different languages? Obviously we could use a basic manual-matching strategy, like so...
+
+```{r}
+room_of_students <- room_of_students %>%
+  mutate(greeting = c('Hi!', 'Bonjour!', 'Privet!', 'Hola!'))
+room_of_students
+```
+
+But in most of our analysis, this will prove insufficient as it depends on us knowing ahead of time what the data looks like (and besides, it we had many more entries, it would take forever to fill in all these blanks). A much better way is to dynamically check to see what their `first_language` is and respond accordingly.
+
+### if_else
+
+This inline logic block allows you to check `if` a condition is `TRUE`. If it is, it runs one expression, or `else` if it's `FALSE`, it runs a different expression. It should then be unsurprising to see it's basic syntax...
+
+`if_else(DATA_TO_CHECK, TRUE_EXPRESSION, FALSE_EXPRESSION)`
+
+We can try tackling our issue above using `if_else`. We'll start slowly by greeting with `Hi!` if the `first_language` is `English` and `?` otherwise.
+
+```{r}
+room_of_students <- room_of_students %>%
+  mutate(greeting = if_else(first_language == 'English', 'Hi!', '?'))
+room_of_students
+```
+
+**Your task:** Extend this pattern to greet all four people in `room_of_students`.
+
+```{r}
+# YOUR CODE HERE
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+room_of_students <- room_of_students %>%
+  mutate(greeting = if_else(first_language == 'English', 'Hi!',
+                            if_else(first_language == 'French', 'Bonjour!',
+                                    if_else(first_language == 'Natalya', 'Privet!',
+                                            if_else(first_language == 'Spanish', 'Hola!', '?')))))
+```
+:::
+
+### case_when
+
+If you completed the previous task, you likely found yourself in a frustrated mess typing the same thing over and over again and nesting function calls. There exists a convenient function, `case_when`, which shortcuts these repeated `if_else` statements. Instead of nesting calls, you just provide a set of `cases` that are evaluated, in order, until one turns out to be `TRUE`. So we can rewrite our mess of `if`s above using one convenient `case_when`. This looks like the following:
+
+```{r}
+room_of_students <- room_of_students %>%
+  mutate(greeting = case_when(
+    first_language == 'English' ~ 'Hi!',
+    first_language == 'French' ~ 'Bonjour!',
+    first_language == 'Russian' ~ 'Privet!',
+    first_language == 'Spanish' ~ 'Hola!',
+    TRUE ~ '?'
+  ))
+```
+
+You'll notice a couple things about this:
+
+1.  The `case` (LHS) and the "`when`" (RHS) are separated by a tilde (`~`). This is the syntax for a `formula` in R (which we'll cover in more detail in later workshops).
+2.  The LHS must evaluate to `TRUE` or `FALSE`
+3.  The RHS must all be the same type
+4.  You can specify a default value by explicitly listing `TRUE` as the `case`. Make sure this is the final statement, however, as R will take the first line that matches
+
+**Your task:** An unknown university is having trouble converting their students' grades to letter grades. They have the following grade system:
+
+| Grade range  | Letter grade |
+|--------------|--------------|
+| 86% to 100%  | A            |
+| 76% to \<86% | B            |
+| 66% to \<76% | C            |
+| 50% to \<66% | D            |
+| \<50%        | F            |
+
+Their grades are stored in the following data frame.
+
+```{r}
+set.seed(2020)
+student_grades <- data.frame(ID = 1:1000,
+                             grade = rnorm(1000, 80, 5))
+```
+
+Help them out by:
+
+1.  Adding a column, `letter_grade` with the correct letter grade. Make sure the letter grade is an `ordered factor` (where `A < B < C < D < F`).
+2.  Compute a summary data frame, `grades_summary`, which gives a count of how many students received each letter grade (ie. one column for `letter_grade` and another column for `n_students`)
+
+```{r}
+# YOUR CODE HERE
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+student_grades <- student_grades %>%
+  mutate(letter_grade = case_when(
+    grade >= 86 ~ 'A',
+    grade >= 76 ~ 'B',
+    grade >= 66 ~ 'C',
+    grade >= 50 ~ 'D',
+    TRUE ~ 'F'
+    ),
+    letter_grade = factor(letter_grade, levels = c('A', 'B', 'C', 'D', 'F'), ordered = T))
+
+grades_summary <- student_grades %>%
+  group_by(letter_grade) %>%
+  summarise(n_students = n())
+```
+:::
+
+Already we can see that we're capable of doing significantly more complex kinds of analysis. We'll introduce one more weird looking function that will allow you to solve the following exercise.
+
+### %in%
+
+Sometimes you'll come across some strange looking functions in R that are surrounded in percent signs, like `%in%`. This is exactly like the pipe (`%>%`) in which the left side is the first argument and the right side is the second argument. For this function, `%in%` does exactly what it sounds like: It checks to see if the first argument is contained within the second argument. For example, we'll use a dataset that {dplyr} provides us with: `starwars`.
+
+```{r}
+glimpse(starwars)
+```
+
+We can see a column, `species`, that seems to contain the different species in Star Wars. My favorite species is Ewok, but I'm not sure if they have any entries for Ewoks. We can easily check this by seeing if `Ewok` is `in` the entries for `species`.
+
+```{r}
+print('Ewok' %in% starwars$species)
+```
+
+You can test if multiple entries are in the set by simply providing a vector of values to the LHS. For example, if we wanted to know if `brown`, `gold` and `green` eyes are all in the set of `eye_color`...
+
+```{r}
+print(c('brown', 'gold', 'green') %in% starwars$eye_color)
+```
+
+And we see that there are no characters with pure green eyes in the Star Wars dataset.
+
+**Your task:** I'm curious to know what characters in this dataset are either `Human`s or `Droid`s. Furthermore, I only want to know about `Human`s that are at least `190` cm and `Droid`s that are at least `90` cm. Save this information in a data frame called `film_characters` with three columns: `name`, `species` and `height` where height is given in meters instead of centimeters.
+
+```{r}
+# YOUR CODE HERE
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+film_characters <- starwars %>%
+  group_by(name) %>%
+  filter(species %in% c('Human', 'Droid'),
+         height >= if_else(species == 'Human', 190, 90)) %>%
+  mutate(height = height / 100) %>%
+  select(name, species, height)
+```
+:::
+
+## More important functions
+
+### merge
+
+When you have two data frames that have a common column (sometimes referred to as a "foreign key"), it's possible to quickly stitch them together based on this shared information. To demonstrate this, I'll shamelessly borrow the example from `?merge`.
+
+```{r}
+authors <- data.frame(
+    surname = I(c("Tukey", "Venables", "Tierney", "Ripley", "McNeil")),
+    nationality = c("US", "Australia", "US", "UK", "Australia"),
+    deceased = c("yes", rep("no", 4)))
+
+authorN <- within(authors, { name <- surname; rm(surname) })
+
+books <- data.frame(
+    name = I(c("Tukey", "Venables", "Tierney",
+             "Ripley", "Ripley", "McNeil", "R Core")),
+    title = c("Exploratory Data Analysis",
+              "Modern Applied Statistics ...",
+              "LISP-STAT",
+              "Spatial Statistics", "Stochastic Simulation",
+              "Interactive Data Analysis",
+              "An Introduction to R"),
+    other.author = c(NA, "Ripley", NA, NA, NA, NA,
+                     "Venables & Smith"))
+```
+
+If we have a peek at the data, you'll see that they all share the author name (either as `name` or `surname`). It may be convenient to collect this information in one place for our analysis, which we'll do now.
+
+**Your task:** Create two data frames: `book_data1` (which merges `authorN` with `books`) and `book_data2` (which merges `authors` with `books`). Make sure to read `?merge` if you get stuck.
+
+```{r}
+# YOUR CODE HERE
+```
+
+::: {.spoiler}
+```{r eval=FALSE}
+book_data1 <- merge(authorN, books, by = 'name')
+book_data2 <- merge(authors, books, by.x = 'surname', by.y = 'name')
+```
+:::
+
+### dcast and melt
+
+Sometimes our data is complete, but the wrong "shape" for us to analyze. We'll learn how to reshape our data using the {reshape2} package, which if it wasn't installed already, can be installed and loaded by running the following.
+
+```{r message=FALSE}
+if(!require(reshape2))
+  install.packages('reshape2')
+if(!require(tidyr))
+  install.packages('tidyr')
+
+library(reshape2)
+library(tidyr)
+```
+
+We'll first focus on the more complicated case of "long" data which we'd like to see in a "wide" format. Take, for example, `us_rent_income`:
+
+```{r}
+head(us_rent_income)
+```
+
+If we want to look at estimated `income` vs. `rent`, it would be convenient to have these in two separate columns rather that in one "long" one. We can do this using the `dcast` function from {reshape2}.
+
+```{r}
+us_rent_income %>%
+  select(-moe) %>%
+  dcast(... ~ variable)
+```
+
+In this case, you provide all the columns you want to preserve as-is on the LHS of the `~` (ie. the x-variables) and the columns you want to create from the data on the RHS (ie. the y-variables). In this case, we want to create a column from the `variable` column in the original data (corresponding to `income` and `rent`) and have it take values from the `estimate` column (which is inferred automatically since it is the only numeric data in the data frame, but can be provided explicitly if needed using `value.var`). Note that the three dots `…` are a convenience variable that stand in for "all other variables" (ie. you could also write `GEOID + NAME ~ variable` to do the same thing).
+
+`melt`, by contrast, is much simpler. It simply lengthens a data frame. Take, for this example, `relig_income`...
+
+```{r}
+head(relig_income)
+```
+
+For plotting, it's convenient to have data in long format (we'll get to this in future workshops). In this case, we'd like to have the income bins running down a single column rather than distributed across multiple ones, which is as simple as `melt`ing it!
+
+```{r}
+head(melt(relig_income, value.name = 'count'))
+```
+
+**Your task:** {tidyr} provides a lot of data for you to practice `melt`ing and `dcast`ing. You can see this by typing `tidyr::` and looking at the autocomplete options. Play around with these data to get more familiar with these functions.
+
+```{r}
+# YOUR CODE HERE
+```
